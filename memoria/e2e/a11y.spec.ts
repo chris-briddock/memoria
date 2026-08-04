@@ -66,6 +66,14 @@ test.describe("a11y: albums", () => {
     await page.getByPlaceholder("Album name").fill("A11y Test");
     await page.getByRole("button", { name: "Create album" }).click();
 
+    // createAlbum redirects to the new album's page once the action has
+    // committed; waiting for it keeps the list assertion below from racing
+    // the server action (a `goto` can otherwise serve a stale /albums page).
+    await expect(page).toHaveURL(/\/albums\/[0-9a-f-]{36}/);
+    await expect(
+      page.getByRole("heading", { name: "A11y Test" }),
+    ).toBeVisible();
+
     await page.goto("/albums");
     await expect(
       page.getByRole("link", { name: /A11y Test/ }),
