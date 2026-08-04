@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+/*
+ * Memoria — editorial monochrome. Pure black/white/greys with a single vivid
+ * red accent: a museum-catalogue ground that keeps all attention on the
+ * photographs.
+ *
+ * Values live on :root so the dark scheme can override them; `@theme inline`
+ * then exposes them to Tailwind as real utilities (bg-paper, text-ink, ...).
+ */
+:root {
+  --paper: #ffffff;
+  --paper-raised: #f6f6f5;
+  --ink: #101012;
+  --ink-soft: #55555a;
+  --ink-faint: #8e8e94;
+  --line: #e4e4e2;
+  --accent: #d92323;
+  --accent-hover: #b91c1c;
+  --accent-soft: #fbecec;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0b0b0c;
+    --paper-raised: #171719;
+    --ink: #f4f4f3;
+    --ink-soft: #a6a6ab;
+    --ink-faint: #6e6e74;
+    --line: #2a2a2d;
+    --accent: #f04444;
+    --accent-hover: #ff6060;
+    --accent-soft: #2a1414;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif,
+    system-ui, sans-serif;
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: var(--accent);
+  color: #ffffff;
+}
+
+@layer components {
+  .field {
+    @apply w-full rounded-md border border-line bg-paper px-3 py-2.5 text-sm
+           text-ink outline-none transition placeholder:text-ink-faint
+           focus:border-accent focus:ring-2 focus:ring-accent/25;
+  }
+
+  .btn-primary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md
+           bg-accent px-4 py-2 text-sm font-medium text-white transition
+           hover:bg-accent-hover focus-visible:outline-2
+           focus-visible:outline-offset-2 focus-visible:outline-accent
+           disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md
+           border border-line bg-transparent px-3 py-2 text-sm text-ink-soft
+           transition hover:border-ink-faint hover:text-ink
+           focus-visible:outline-2 focus-visible:outline-offset-2
+           focus-visible:outline-accent disabled:opacity-50;
+  }
+
+  .card {
+    @apply rounded-lg border border-line bg-paper-raised;
+  }
+
+  .link-red {
+    @apply text-accent underline-offset-4 transition hover:underline
+           focus-visible:outline-2 focus-visible:outline-offset-2
+           focus-visible:outline-accent;
+  }
+}
