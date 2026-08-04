@@ -6,8 +6,6 @@ import {
   HeadBucketCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import type { FullConfig } from "@playwright/test";
-
 const ROOT = path.join(__dirname, "..");
 const ADMIN_URL =
   "postgresql://memoria:memoria_dev_password@localhost:5432/postgres";
@@ -22,10 +20,20 @@ const E2E_URL = `postgresql://memoria:memoria_dev_password@localhost:5432/${E2E_
  * Both the database and bucket are disposable — a fresh `docker compose up`
  * plus this setup reproduces the whole backend.
  */
-export default async function globalSetup(_config: FullConfig) {
-  await ensureDatabase();
-  pushSchema();
-  await ensureBucket();
+export default async function globalSetup() {
+  try {
+    await ensureDatabase();
+    pushSchema();
+    await ensureBucket();
+  } catch (error) {
+    // A failure here otherwise surfaces downstream as confusing spec errors
+    // ("database does not exist", "relation missing"). Fail fast with context.
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `e2e global-setup failed to prepare the ${E2E_DB} backend: ${detail}`,
+      { cause: error },
+    );
+  }
 }
 
 async function ensureDatabase() {
@@ -38,6 +46,7 @@ async function ensureDatabase() {
     );
     if (rows.length === 0) {
       await admin.query(`CREATE DATABASE ${E2E_DB}`);
+      console.log(`[e2e setup] created database ${E2E_DB}`);
     }
   } finally {
     await admin.end();
