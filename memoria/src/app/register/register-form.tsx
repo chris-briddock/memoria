@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { registerAction } from "@/lib/actions/auth";
+import type { FormState } from "@/lib/action-types";
 import {
   OAuthButtons,
   type OAuthProviderInfo,
@@ -20,8 +20,16 @@ function SubmitButton() {
 export function RegisterForm({
   requiresInvite,
   oauthProviders,
-}: Readonly<{ requiresInvite: boolean; oauthProviders: OAuthProviderInfo[] }>) {
-  const [state, formAction] = useActionState(registerAction, undefined);
+  register,
+  beginOAuth,
+}: Readonly<{
+  requiresInvite: boolean;
+  oauthProviders: OAuthProviderInfo[];
+  /** Server actions, passed by the server page so this bundle never imports them. */
+  register: (prev: FormState, formData: FormData) => Promise<FormState>;
+  beginOAuth: (prev: FormState, formData: FormData) => Promise<FormState>;
+}>) {
+  const [state, formAction] = useActionState(register, undefined);
   // Controlled so the OAuth buttons can carry the same code through sign-in.
   const [inviteCode, setInviteCode] = useState("");
 
@@ -111,6 +119,7 @@ export function RegisterForm({
               providers={oauthProviders}
               verb="Continue"
               inviteCode={inviteCode}
+              action={beginOAuth}
             />
             <p className="text-xs text-ink-faint">
               {requiresInvite

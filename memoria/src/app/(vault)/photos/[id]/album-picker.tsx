@@ -2,16 +2,22 @@
 
 import { useOptimistic, useTransition } from "react";
 import Link from "next/link";
-import { setPhotoAlbum } from "@/lib/actions/photos";
 
 export function AlbumPicker({
   photoId,
   albums,
   memberOf,
+  setPhotoAlbum,
 }: Readonly<{
   photoId: string;
   albums: { id: string; name: string }[];
   memberOf: string[];
+  /** Server action, passed by the server page so this bundle never imports it. */
+  setPhotoAlbum: (
+    photoId: string,
+    albumId: string,
+    shouldBeIn: boolean,
+  ) => Promise<void>;
 }>) {
   const [, startTransition] = useTransition();
   const [optimisticMembership, toggleOptimistic] = useOptimistic(

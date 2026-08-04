@@ -3,6 +3,12 @@ import Link from "next/link";
 import { verifySession } from "@/lib/dal";
 import { listSignInMethods } from "@/lib/queries";
 import { enabledOAuthProviders } from "@/lib/oauth-providers";
+import {
+  changePassword,
+  linkOAuthAccount,
+  unlinkOAuthAccount,
+  updateName,
+} from "@/lib/actions/account";
 import { SignInMethods } from "./sign-in-methods";
 import { ProfileSection } from "./profile-section";
 
@@ -31,6 +37,8 @@ export default async function SettingsPage() {
         <ProfileSection
           currentName={user.name}
           hasPassword={signInMethods.hasPassword}
+          updateName={updateName}
+          changePassword={changePassword}
         />
       </section>
 
@@ -46,6 +54,8 @@ export default async function SettingsPage() {
           hasPassword={signInMethods.hasPassword}
           linkedProviders={signInMethods.providers}
           availableProviders={enabledOAuthProviders()}
+          linkProvider={linkOAuthAccount}
+          unlinkProvider={unlinkOAuthAccount}
         />
       </section>
 

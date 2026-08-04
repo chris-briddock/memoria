@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { signInAction } from "@/lib/actions/auth";
+import type { FormState } from "@/lib/action-types";
 import {
   OAuthButtons,
   type OAuthProviderInfo,
@@ -20,8 +20,16 @@ function SubmitButton() {
 export function SignInForm({
   next,
   oauthProviders,
-}: Readonly<{ next?: string; oauthProviders: OAuthProviderInfo[] }>) {
-  const [state, formAction] = useActionState(signInAction, undefined);
+  signIn,
+  beginOAuth,
+}: Readonly<{
+  next?: string;
+  oauthProviders: OAuthProviderInfo[];
+  /** Server actions, passed by the server page so this bundle never imports them. */
+  signIn: (prev: FormState, formData: FormData) => Promise<FormState>;
+  beginOAuth: (prev: FormState, formData: FormData) => Promise<FormState>;
+}>) {
+  const [state, formAction] = useActionState(signIn, undefined);
 
   return (
     <div className="space-y-4">
@@ -78,6 +86,7 @@ export function SignInForm({
               providers={oauthProviders}
               verb="Sign in"
               next={next ?? "/"}
+              action={beginOAuth}
             />
           </div>
         </>

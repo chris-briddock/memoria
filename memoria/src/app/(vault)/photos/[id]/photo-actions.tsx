@@ -1,18 +1,24 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { deletePhoto, toggleFavorite, updateCaption } from "@/lib/actions/photos";
 
 export function PhotoActions({
   photoId,
   favorite,
   caption,
   canDelete,
+  updateCaption,
+  toggleFavorite,
+  deletePhoto,
 }: Readonly<{
   photoId: string;
   favorite: boolean;
   caption: string | null;
   canDelete: boolean;
+  /** Server actions, passed by the server page so this bundle never imports them. */
+  updateCaption: (photoId: string, formData: FormData) => Promise<void>;
+  toggleFavorite: (photoId: string) => Promise<void>;
+  deletePhoto: (photoId: string) => Promise<void>;
 }>) {
   const [isPending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);

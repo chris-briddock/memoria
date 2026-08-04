@@ -155,26 +155,10 @@ jobs:
       run:
         working-directory: memoria
 
-    # /register prerenders at build time and queries `select count(*) from users`
-    # to choose bootstrap-vs-invite mode, so the build needs a live database
-    # with the schema applied.
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: memoria
-          POSTGRES_PASSWORD: memoria_dev_password
-          POSTGRES_DB: memoria
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U memoria -d memoria"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
     env:
-      DATABASE_URL: postgresql://memoria:memoria_dev_password@localhost:5432/memoria
+      # Placeholder values so module-level config reads succeed; no page
+      # queries the database at build time (/signin and /register are
+      # force-dynamic), so the build needs no live services.
       AUTH_SECRET: build-placeholder-secret
       S3_ENDPOINT: http://localhost:9000
       S3_REGION: us-east-1
@@ -194,10 +178,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Push the Drizzle schema
-        run: npx drizzle-kit push --force
-
-      # Catches build-only errors: RSC boundary violations, type errors surfaced
-      # at build time, and prerender failures (e.g. /register's user count).
+      # Catches build-only errors: RSC boundary violations and type errors
+      # surfaced at build time.
       - name: next build
         run: npm run build

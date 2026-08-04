@@ -1,9 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { deleteAlbum } from "@/lib/actions/photos";
 
-export function DeleteAlbumButton({ albumId }: Readonly<{ albumId: string }>) {
+export function DeleteAlbumButton({
+  albumId,
+  deleteAlbum,
+}: Readonly<{
+  albumId: string;
+  /** Server action, passed by the server page so this bundle never imports it. */
+  deleteAlbum: (albumId: string) => Promise<void>;
+}>) {
   const [confirming, setConfirming] = useState(false);
   const [isPending, startTransition] = useTransition();
 

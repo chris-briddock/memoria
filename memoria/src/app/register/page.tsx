@@ -4,9 +4,15 @@ import { count } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { allOAuthProviders } from "@/lib/oauth-providers";
+import { registerAction, beginOAuthSignIn } from "@/lib/actions/auth";
 import { RegisterForm } from "./register-form";
 
 export const metadata: Metadata = { title: "Join" };
+
+// The bootstrap-vs-invite copy depends on the live user count, so render
+// per-request instead of prerendering (which would query the DB at build
+// time and freeze the mode from whatever the build database held).
+export const dynamic = "force-dynamic";
 
 export default async function RegisterPage() {
   const [{ value: userCount }] = await db.select({ value: count() }).from(users);
@@ -30,6 +36,8 @@ export default async function RegisterPage() {
         <RegisterForm
           requiresInvite={!isBootstrap}
           oauthProviders={allOAuthProviders()}
+          register={registerAction}
+          beginOAuth={beginOAuthSignIn}
         />
 
         <p className="mt-6 text-center text-sm text-ink-faint">

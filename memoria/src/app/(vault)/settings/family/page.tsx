@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/dal";
 import { listInvites, listMembers } from "@/lib/queries";
-import { createInvite } from "@/lib/actions/photos";
+import { createInvite, revokeInvite } from "@/lib/actions/photos";
 import { RevokeInviteButton } from "../revoke-invite-button";
 
 export const metadata: Metadata = { title: "Family" };
@@ -59,7 +59,10 @@ export default async function FamilyPage() {
                     ? `Expires ${invite.expiresAt.toLocaleDateString("en-GB")}`
                     : "No expiry"}
                 </span>
-                <RevokeInviteButton inviteId={invite.id} />
+                <RevokeInviteButton
+                  inviteId={invite.id}
+                  revokeInvite={revokeInvite}
+                />
               </li>
             ))}
           </ul>

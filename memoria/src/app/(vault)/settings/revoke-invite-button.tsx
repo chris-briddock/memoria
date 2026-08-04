@@ -1,9 +1,15 @@
 "use client";
 
 import { useTransition } from "react";
-import { revokeInvite } from "@/lib/actions/photos";
 
-export function RevokeInviteButton({ inviteId }: Readonly<{ inviteId: string }>) {
+export function RevokeInviteButton({
+  inviteId,
+  revokeInvite,
+}: Readonly<{
+  inviteId: string;
+  /** Server action, passed by the server page so this bundle never imports it. */
+  revokeInvite: (inviteId: string) => Promise<void>;
+}>) {
   const [isPending, startTransition] = useTransition();
 
   return (

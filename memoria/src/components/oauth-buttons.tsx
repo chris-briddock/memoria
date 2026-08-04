@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { beginOAuthSignIn, type FormState } from "@/lib/actions/auth";
+import type { FormState } from "@/lib/action-types";
 import type { OAuthProviderId } from "@/lib/oauth-providers";
 
 export type OAuthProviderInfo = {
@@ -41,14 +41,18 @@ export function OAuthButtons({
   verb = "Continue",
   inviteCode,
   next,
+  action,
 }: Readonly<{
   providers: OAuthProviderInfo[];
   verb?: string;
   inviteCode?: string;
   next?: string;
+  /** The `beginOAuthSignIn` server action, passed by the parent server
+   *  component so this client bundle never imports the server module. */
+  action: (prev: FormState, formData: FormData) => Promise<FormState>;
 }>) {
   const [state, formAction] = useActionState<FormState, FormData>(
-    beginOAuthSignIn,
+    action,
     undefined,
   );
   if (providers.length === 0) return null;

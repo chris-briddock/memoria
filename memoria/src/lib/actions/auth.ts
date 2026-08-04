@@ -14,8 +14,7 @@ import {
 } from "@/lib/oauth";
 import { OAUTH_PROVIDERS } from "@/lib/oauth-providers";
 import { field } from "@/lib/form";
-
-export type FormState = { error?: string } | undefined;
+import type { FormState } from "@/lib/action-types";
 
 const registerSchema = z.object({
   name: z.string().trim().min(1, "Please enter your name").max(80),

@@ -1,7 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import sharp from "sharp";
-import exifr from "exifr";
+import type sharpType from "sharp";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { photos } from "@/db/schema";
@@ -49,8 +48,13 @@ export function extensionFor(mime: string): string {
 
 /** EXIF capture time, falling back through the usual tag variants. */
 async function readTakenAt(buffer: Buffer): Promise<Date | null> {
+  // Lazy-import exifr at call time. Its full build probes fs/zlib/http/https
+  // at module-evaluation time and console.warn-s "Couldn't load fs/zlib" when
+  // those Node built-ins can't resolve inside Next's static-generation
+  // workers. Deferring the import keeps module evaluation side-effect free.
+  const { parse } = await import("exifr");
   try {
-    const exif = await exifr.parse(buffer, {
+    const exif = await parse(buffer, {
       pick: ["DateTimeOriginal", "CreateDate", "ModifyDate"],
     });
     const raw = exif?.DateTimeOriginal ?? exif?.CreateDate ?? exif?.ModifyDate;
@@ -92,6 +96,13 @@ export async function ingestPhoto(
   let width: number | null = null;
   let height: number | null = null;
   let thumbnail: Buffer;
+
+  // Lazy-import sharp at call time. Next.js imports every route module during
+  // page-data collection just to read its segment config; evaluating the
+  // top-level `import sharp` there triggers sharp's fs/zlib probes, which log
+  // "Couldn't load fs/zlib" during the production build. Deferring the import
+  // keeps module evaluation side-effect free.
+  const { default: sharp }: { default: typeof sharpType } = await import("sharp");
 
   try {
     const image = sharp(buffer, { failOn: "none" });

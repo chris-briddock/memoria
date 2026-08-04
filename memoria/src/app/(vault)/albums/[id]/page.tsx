@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getAlbum } from "@/lib/queries";
 import { verifySession } from "@/lib/dal";
+import { deleteAlbum } from "@/lib/actions/photos";
 import { PhotoGrid } from "@/components/photo-grid";
 import { DeleteAlbumButton } from "./delete-album-button";
 
@@ -47,7 +48,9 @@ export default async function AlbumPage({
             {album.description && ` · ${album.description}`}
           </p>
         </div>
-        {canDelete && <DeleteAlbumButton albumId={album.id} />}
+        {canDelete && (
+          <DeleteAlbumButton albumId={album.id} deleteAlbum={deleteAlbum} />
+        )}
       </header>
 
       {photos.length === 0 ? (

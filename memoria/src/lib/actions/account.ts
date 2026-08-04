@@ -10,6 +10,7 @@ import { verifySession } from "@/lib/dal";
 import { signIn } from "@/auth";
 import { field } from "@/lib/form";
 import type { OAuthProviderId } from "@/lib/oauth-providers";
+import type { ProfileResult, UnlinkResult } from "@/lib/action-types";
 
 /**
  * Linking an OAuth provider to the current account is intentionally thin: the
@@ -22,8 +23,6 @@ export async function linkOAuthAccount(provider: OAuthProviderId) {
   await verifySession();
   await signIn(provider, { redirectTo: "/settings" });
 }
-
-export type UnlinkResult = { error?: string } | undefined;
 
 /**
  * Remove an OAuth provider from the current account. Guarded so the account
@@ -71,8 +70,6 @@ export async function unlinkOAuthAccount(
 // ---------------------------------------------------------------------------
 // Profile: display name and password.
 // ---------------------------------------------------------------------------
-
-export type ProfileResult = { error?: string; success?: string } | undefined;
 
 const nameSchema = z.string().trim().min(1, "Please enter your name").max(80);
 

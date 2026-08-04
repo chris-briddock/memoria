@@ -4,9 +4,14 @@ import { count } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { allOAuthProviders } from "@/lib/oauth-providers";
+import { signInAction, beginOAuthSignIn } from "@/lib/actions/auth";
 import { SignInForm } from "./signin-form";
 
 export const metadata: Metadata = { title: "Sign in" };
+
+// The empty-vault copy depends on the live user count, so render per-request
+// instead of prerendering (which would query the DB at build time).
+export const dynamic = "force-dynamic";
 
 /** Friendly messages for errors Auth.js appends to the error page URL. */
 function oauthErrorMessage(error?: string): string | null {
@@ -67,7 +72,12 @@ export default async function SignInPage({
                 {errorMessage}
               </p>
             )}
-            <SignInForm next={next} oauthProviders={allOAuthProviders()} />
+            <SignInForm
+              next={next}
+              oauthProviders={allOAuthProviders()}
+              signIn={signInAction}
+              beginOAuth={beginOAuthSignIn}
+            />
             <p className="mt-6 text-center text-sm text-ink-faint">
               Have an invite code?{" "}
               <Link href="/register" className="link-red">

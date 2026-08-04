@@ -3,6 +3,12 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getPhoto, listAlbums, albumsForPhoto } from "@/lib/queries";
 import { verifySession } from "@/lib/dal";
+import {
+  deletePhoto,
+  setPhotoAlbum,
+  toggleFavorite,
+  updateCaption,
+} from "@/lib/actions/photos";
 import { PhotoActions } from "./photo-actions";
 import { AlbumPicker } from "./album-picker";
 import { formatBytes } from "@/lib/format";
@@ -62,12 +68,16 @@ export default async function PhotoPage({
             favorite={photo.favorite}
             caption={photo.caption}
             canDelete={canDelete}
+            updateCaption={updateCaption}
+            toggleFavorite={toggleFavorite}
+            deletePhoto={deletePhoto}
           />
 
           <AlbumPicker
             photoId={photo.id}
             albums={allAlbums.map((a) => ({ id: a.id, name: a.name }))}
             memberOf={memberOf.map((a) => a.id)}
+            setPhotoAlbum={setPhotoAlbum}
           />
 
           <dl className="border-t border-line">

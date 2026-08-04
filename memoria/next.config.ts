@@ -18,6 +18,13 @@ function commitHash(): string {
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  // Keep native / Node-only server packages out of the bundle so Turbopack
+  // doesn't have to trace their conditional builtin imports. `exifr`'s full
+  // build probes fs/zlib/http/https at module-evaluation time and
+  // console.warn-s "Couldn't load fs/zlib" when those Node built-ins can't
+  // resolve inside the bundler's static-generation workers; externalizing it
+  // makes Node load the package natively where the built-ins exist.
+  serverExternalPackages: ["sharp", "pg", "@aws-sdk/client-s3", "exifr"],
   env: {
     APP_VERSION: packageJson.version,
     APP_COMMIT: commitHash(),

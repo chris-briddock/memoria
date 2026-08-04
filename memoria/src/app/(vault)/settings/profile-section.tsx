@@ -2,11 +2,12 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import {
-  changePassword,
-  updateName,
-  type ProfileResult,
-} from "@/lib/actions/account";
+import type { ProfileResult } from "@/lib/action-types";
+
+type ProfileAction = (
+  prev: ProfileResult,
+  formData: FormData,
+) => Promise<ProfileResult>;
 
 function SaveButton({ label, pendingLabel }: Readonly<{ label: string; pendingLabel: string }>) {
   const { pending } = useFormStatus();
@@ -31,7 +32,10 @@ function Feedback({ state }: Readonly<{ state: ProfileResult }>) {
   return null;
 }
 
-function NameForm({ currentName }: Readonly<{ currentName: string | null }>) {
+function NameForm({
+  currentName,
+  updateName,
+}: Readonly<{ currentName: string | null; updateName: ProfileAction }>) {
   const [state, formAction] = useActionState<ProfileResult, FormData>(
     updateName,
     undefined,
@@ -58,7 +62,10 @@ function NameForm({ currentName }: Readonly<{ currentName: string | null }>) {
   );
 }
 
-function PasswordForm({ hasPassword }: Readonly<{ hasPassword: boolean }>) {
+function PasswordForm({
+  hasPassword,
+  changePassword,
+}: Readonly<{ hasPassword: boolean; changePassword: ProfileAction }>) {
   const [state, formAction] = useActionState<ProfileResult, FormData>(
     changePassword,
     undefined,
@@ -128,18 +135,26 @@ function PasswordForm({ hasPassword }: Readonly<{ hasPassword: boolean }>) {
 export function ProfileSection({
   currentName,
   hasPassword,
-}: Readonly<{ currentName: string | null; hasPassword: boolean }>) {
+  updateName,
+  changePassword,
+}: Readonly<{
+  currentName: string | null;
+  hasPassword: boolean;
+  /** Server actions, passed by the server page so this bundle never imports them. */
+  updateName: ProfileAction;
+  changePassword: ProfileAction;
+}>) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-ink-soft">Display name</h3>
-        <NameForm currentName={currentName} />
+        <NameForm currentName={currentName} updateName={updateName} />
       </div>
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-ink-soft">
           {hasPassword ? "Change password" : "Set a password"}
         </h3>
-        <PasswordForm hasPassword={hasPassword} />
+        <PasswordForm hasPassword={hasPassword} changePassword={changePassword} />
       </div>
     </div>
   );

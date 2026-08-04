@@ -2,11 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import {
-  linkOAuthAccount,
-  unlinkOAuthAccount,
-  type UnlinkResult,
-} from "@/lib/actions/account";
+import type { UnlinkResult } from "@/lib/action-types";
 import type { OAuthProviderId } from "@/lib/oauth-providers";
 
 function UnlinkButton() {
@@ -27,9 +23,15 @@ function UnlinkButton() {
   );
 }
 
-function UnlinkForm({ provider }: Readonly<{ provider: OAuthProviderId }>) {
+function UnlinkForm({
+  provider,
+  unlink,
+}: Readonly<{
+  provider: OAuthProviderId;
+  unlink: (provider: OAuthProviderId) => Promise<UnlinkResult>;
+}>) {
   const [state, formAction] = useActionState<UnlinkResult, void>(
-    () => unlinkOAuthAccount(provider),
+    () => unlink(provider),
     undefined,
   );
   return (
@@ -63,10 +65,15 @@ export function SignInMethods({
   hasPassword,
   linkedProviders,
   availableProviders,
+  linkProvider,
+  unlinkProvider,
 }: Readonly<{
   hasPassword: boolean;
   linkedProviders: string[];
   availableProviders: { id: OAuthProviderId; label: string }[];
+  /** Server actions, passed by the server page so this bundle never imports them. */
+  linkProvider: (provider: OAuthProviderId) => Promise<void>;
+  unlinkProvider: (provider: OAuthProviderId) => Promise<UnlinkResult>;
 }>) {
   const linkable = availableProviders.filter(
     (p) => !linkedProviders.includes(p.id),
@@ -91,7 +98,7 @@ export function SignInMethods({
             <p className="text-sm font-medium">{p.label}</p>
             <span className="text-xs text-ink-faint">Linked</span>
             <span className="ml-auto">
-              <UnlinkForm provider={p.id} />
+              <UnlinkForm provider={p.id} unlink={unlinkProvider} />
             </span>
           </li>
         );
@@ -105,7 +112,7 @@ export function SignInMethods({
           </p>
           <span className="ml-auto flex gap-2">
             {linkable.map((p) => (
-              <form key={p.id} action={() => linkOAuthAccount(p.id)}>
+              <form key={p.id} action={() => linkProvider(p.id)}>
                 <LinkButton label={p.label} />
               </form>
             ))}
