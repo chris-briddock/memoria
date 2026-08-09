@@ -1,0 +1,77 @@
+name: Migrate
+
+# Applies Drizzle migrations to the target database.
+#
+#   push to `staging` -> `staging` GitHub environment
+#   push to `main`    -> `production` GitHub environment
+#
+# Each GitHub environment must define a `DATABASE_URL` secret pointing at that
+# environment's database (see .github/DEPLOYMENT.md). Environment protection
+# rules (required reviewers on `production`) gate the production run.
+#
+# Vercel deploys on push independently; if new app code depends on a migration,
+# either merge the migration first or gate Vercel builds on this workflow (see
+# DEPLOYMENT.md "Migration ordering").
+
+# Quoted because YAML 1.1 parsers treat the bare key `on` as boolean true.
+"on":
+  push:
+    branches: [main, staging]
+    paths:
+      # Only run when the schema/migrations (or this workflow) could have
+      # changed. Other pushes have nothing to migrate.
+      - "memoria/drizzle/**"
+      - "memoria/drizzle.config.ts"
+      - "memoria/package.json"
+      - "memoria/package-lock.json"
+      - ".github/workflows/migrate.yml"
+  # Manual escape hatch: re-run against either environment, e.g. after a
+  # failed run or to bring a fresh database up to date.
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target GitHub environment"
+        required: true
+        type: environment
+
+# Serialize migrations per target ref: two pushes must never migrate the same
+# database concurrently. Never cancel an in-flight migration.
+concurrency:
+  group: migrate-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Apply migrations
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: memoria
+    environment: >-
+      ${{
+        github.event_name == 'workflow_dispatch'
+          && inputs.environment
+          || (github.ref_name == 'main' && 'production' || 'staging')
+      }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: memoria/package-lock.json
+
+      # Full install: drizzle-kit is a devDependency. Still far cheaper than
+      # building the app.
+      - name: Install dependencies
+        run: npm ci
+
+      # drizzle-kit migrate is non-interactive and applies any unapplied files
+      # from drizzle/ in journal order. drizzle.config.ts reads DATABASE_URL
+      # from the environment.
+      - name: Apply migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

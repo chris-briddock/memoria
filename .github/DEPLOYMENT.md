@@ -12,7 +12,8 @@ CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit/integration tests,
 the full Playwright e2e suite, and a production build on every push/PR. Deploys
 are handled by Vercel's Git integration — pushing to `main` triggers a
 production deploy, and every PR gets a preview deploy. No separate deploy job is
-needed in Actions.
+needed in Actions. Schema changes are applied by the migration pipeline
+described below.
 
 ## 1. Neon (Postgres)
 
@@ -28,7 +29,48 @@ needed in Actions.
    DATABASE_URL="<neon-pooled-url>" npx drizzle-kit push
    ```
 
-   (Or generate SQL with `npm run db:generate` and apply `drizzle/` migrations.)
+   (Or generate SQL with `npm run db:generate` and apply `drizzle/` migrations.
+   Ongoing schema changes are applied automatically by the migration pipeline —
+   see below.)
+
+4. Repeat with a second Neon branch (or project) for **staging** — Neon
+   branches are free and give staging an isolated copy of the schema.
+
+## 1a. Migration pipeline (staging & production)
+
+Schema changes land as SQL files under `memoria/drizzle/` (created with
+`npm run db:generate`). The [Migrate workflow](workflows/migrate.yml) applies
+them via `drizzle-kit migrate`:
+
+| Trigger                    | GitHub environment | Database            |
+| -------------------------- | ------------------ | ------------------- |
+| Push to `staging`          | `staging`          | staging Neon branch |
+| Push to `main`             | `production`       | production Neon DB  |
+| Manual (Actions → Migrate) | chosen at dispatch | chosen at dispatch  |
+
+The workflow only runs when `memoria/drizzle/`, the Drizzle config, or
+dependencies change, and is serialized per ref so two pushes never migrate the
+same database concurrently.
+
+### One-time GitHub setup
+
+1. **Settings → Environments**: create `staging` and `production`.
+2. On each, add the secret **`DATABASE_URL`** — the pooled Neon connection
+   string for that environment's database. (Use the _direct_ endpoint here if
+   you prefer: migrations are short-lived and don't need the pooler, though the
+   pooled URL also works. drizzle-kit needs no special privileges beyond DDL.)
+3. On `production`, add a **required reviewer** protection rule so schema
+   changes to prod wait for explicit approval. `staging` can stay ungated.
+
+### Migration ordering
+
+Vercel deploys on push independently of this workflow, so a push can briefly
+run new code against an unmigrated database. Keep migrations
+backwards-compatible (add columns as nullable, expand-then-contract). If a
+deploy _requires_ the migration first, merge the migration in its own commit
+and wait for the Migrate run to finish before merging dependent code — or set a
+Vercel [deployment check](https://vercel.com/docs/deployment-checks) gating
+builds on the Migrate workflow's success.
 
 ## 2. Backblaze B2 (object storage)
 
@@ -58,20 +100,20 @@ The app talks S3 via `@aws-sdk/client-s3`, so B2's S3-compatible API works as-is
 
 Set these in **Vercel → Project → Settings → Environment Variables**:
 
-| Variable                | Value                                             |
-| ----------------------- | ------------------------------------------------- |
-| `DATABASE_URL`          | Neon pooled connection string                     |
-| `AUTH_SECRET`           | `openssl rand -hex 32`                            |
-| `AUTH_URL`              | `https://<your-domain>` (production URL)          |
-| `AUTH_TRUST_HOST`       | `true`                                            |
-| `S3_ENDPOINT`           | `https://s3.<region>.backblazeb2.com`             |
-| `S3_REGION`             | B2 region, e.g. `us-west-004`                     |
-| `S3_BUCKET`             | `memoria-photos`                                  |
-| `S3_ACCESS_KEY_ID`      | B2 application key ID                             |
-| `S3_SECRET_ACCESS_KEY`  | B2 application key                                |
+| Variable                  | Value                                                        |
+| ------------------------- | ------------------------------------------------------------ |
+| `DATABASE_URL`            | Neon pooled connection string                                |
+| `AUTH_SECRET`             | `openssl rand -hex 32`                                       |
+| `AUTH_URL`                | `https://<your-domain>` (production URL)                     |
+| `AUTH_TRUST_HOST`         | `true`                                                       |
+| `S3_ENDPOINT`             | `https://s3.<region>.backblazeb2.com`                        |
+| `S3_REGION`               | B2 region, e.g. `us-west-004`                                |
+| `S3_BUCKET`               | `memoria-photos`                                             |
+| `S3_ACCESS_KEY_ID`        | B2 application key ID                                        |
+| `S3_SECRET_ACCESS_KEY`    | B2 application key                                           |
 | `MEMORIA_BOOTSTRAP_EMAIL` | Optional: always treat this email as admin on first register |
-| `AUTH_GOOGLE_ID`        | Optional: Google OAuth client ID (see below)     |
-| `AUTH_GOOGLE_SECRET`    | Optional: Google OAuth client secret             |
+| `AUTH_GOOGLE_ID`          | Optional: Google OAuth client ID (see below)                 |
+| `AUTH_GOOGLE_SECRET`      | Optional: Google OAuth client secret                         |
 
 These mirror the names in [`memoria/.env.e2e`](../memoria/.env.e2e) and
 [`memoria/.env.example`](../memoria/.env.example); keep real values out of git.
@@ -104,7 +146,7 @@ scopes — no sensitive-scope verification is required.
   Password is optional on that path.
 - **Linking:** a signed-in user clicks **Link** under Family → Sign-in
   methods; Auth.js attaches the provider to the existing account.
-- **Unlinking:** removing the *last* sign-in method requires a password to be
+- **Unlinking:** removing the _last_ sign-in method requires a password to be
   set first, so nobody locks themselves out.
 
 ## 4. Wiring it together
