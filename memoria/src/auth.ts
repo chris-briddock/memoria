@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { Provider } from "next-auth/providers";
-import { db } from "@/db";
+import { db, getDb } from "@/db";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
 import {
   claimInvite,
@@ -32,16 +32,37 @@ class OAuthInviteRequired extends AuthError {
   static readonly type = "AccessDenied";
 }
 
-const baseAdapter = DrizzleAdapter(db, {
-  usersTable: users,
-  accountsTable: accounts,
-  sessionsTable: sessions,
-  verificationTokensTable: verificationTokens,
+// The adapter inspects the client instance's prototype chain to detect the
+// database flavour, so it needs the real PgDatabase — not the lazy `db` proxy.
+// Build it lazily: this module is imported during `next build` page-data
+// collection, when DATABASE_URL is not set, so the client (and the pool behind
+// it) must not be created until Auth.js actually invokes an adapter method.
+type BaseAdapter = ReturnType<typeof DrizzleAdapter>;
+let baseAdapter: BaseAdapter | undefined;
+function getBaseAdapter(): BaseAdapter {
+  baseAdapter ??= DrizzleAdapter(getDb(), {
+    usersTable: users,
+    accountsTable: accounts,
+    sessionsTable: sessions,
+    verificationTokensTable: verificationTokens,
+  });
+  return baseAdapter;
+}
+
+const adapter: BaseAdapter = new Proxy({} as BaseAdapter, {
+  get(_target, prop) {
+    if (prop === "createUser") return createUserWithInviteGate;
+    const base = getBaseAdapter() as Record<PropertyKey, unknown>;
+    const value = Reflect.get(base, prop);
+    return typeof value === "function" ? value.bind(base) : value;
+  },
 });
 
-const adapter: typeof baseAdapter = {
-  ...baseAdapter,
-  async createUser(data) {
+// createUser is overridden to gate OAuth account creation on an invite; the
+// rest of the adapter delegates to the lazily-built base.
+async function createUserWithInviteGate(
+  data: Parameters<NonNullable<BaseAdapter["createUser"]>>[0],
+) {
     // Existence check, not COUNT(*): the bootstrap decision only needs to
     // know if the users table is empty. COUNT(*) forces a full table scan
     // (Postgres MVCC can't satisfy it from an index), which gets expensive
@@ -101,8 +122,7 @@ const adapter: typeof baseAdapter = {
       image: user.image,
       emailVerified: user.emailVerified,
     };
-  },
-};
+}
 
 /** OAuth providers are only registered when their env credentials exist. */
 function oauthProviders(): Provider[] {

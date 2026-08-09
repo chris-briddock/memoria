@@ -16,7 +16,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["test/**/*.test.ts"],
-    setupFiles: ["./test/setup.integration.ts"],
+    setupFiles: ["./test/setup.ts"],
     // Integration suites (queries, ingest-pipeline, actions) share the single
     // `memoria_test` database and each TRUNCATEs it. Running test files in
     // parallel workers makes one file's truncate wipe another's fixtures, so

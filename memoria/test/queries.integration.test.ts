@@ -22,6 +22,7 @@ import {
   getAlbum,
   getPhoto,
   getVaultStats,
+  isBootstrapping,
   isPhotoInAlbum,
   listAlbums,
   listInvites,
@@ -157,8 +158,27 @@ describe("albums + membership", () => {
   });
 });
 
+describe("isBootstrapping", () => {
+  it("is false while at least one user exists", async () => {
+    expect(await isBootstrapping()).toBe(false);
+  });
+
+  it("is true when the users table is empty", async () => {
+    await truncateAll();
+    expect(await isBootstrapping()).toBe(true);
+    // Restore the shared user fixtures for subsequent suites. (Photos and
+    // albums were also wiped; the suites below re-seed what they need.)
+    await db.insert(users).values([ADMIN, MEMBER]);
+  });
+});
+
 describe("getVaultStats", () => {
   it("aggregates photos, bytes, albums and members", async () => {
+    // Self-sufficient: seed one photo and one album so the counts are nonzero
+    // regardless of what earlier suites left behind.
+    await db.insert(photos).values(makePhoto());
+    await db.insert(albums).values({ name: "Stats", createdBy: ADMIN.id });
+
     const stats = await getVaultStats();
     expect(stats.members).toBeGreaterThanOrEqual(2);
     expect(stats.photos).toBeGreaterThanOrEqual(1);
@@ -180,6 +200,9 @@ describe("admin-only listings", () => {
   });
 
   it("listMembers returns photo counts for admins, [] for members", async () => {
+    // Self-sufficient: ensure the admin has at least one photo to count.
+    await db.insert(photos).values(makePhoto({ uploadedBy: ADMIN.id }));
+
     verifySession.mockResolvedValue(ADMIN);
     const members = await listMembers();
     const admin = members.find((m) => m.id === ADMIN.id);

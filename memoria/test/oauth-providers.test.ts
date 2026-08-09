@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  allOAuthProviders,
   enabledOAuthProviders,
   isOAuthEnabled,
   OAUTH_PROVIDERS,
@@ -33,6 +34,16 @@ describe("oauth-providers registry (import-time flags)", () => {
   it("exposes google with a stable label", () => {
     expect(OAUTH_PROVIDERS.map((p) => p.id)).toEqual(["google"]);
     expect(OAUTH_PROVIDERS.map((p) => p.label)).toEqual(["Google"]);
+  });
+
+  it("lists every known provider for the auth screens, without the enabled flag", () => {
+    const all = allOAuthProviders();
+    expect(all).toEqual([{ id: "google", label: "Google" }]);
+    // The auth screens offer every provider, configured or not.
+    expect(all).toHaveLength(OAUTH_PROVIDERS.length);
+    for (const entry of all) {
+      expect(entry).not.toHaveProperty("enabled");
+    }
   });
 
   it("reports enabled providers based on the env present at import time", () => {
