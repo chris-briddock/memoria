@@ -1,12 +1,21 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { listAlbums } from "@/lib/queries";
-import { createAlbum } from "@/lib/actions/photos";
+import { apiGetRequired } from "@/lib/api-client";
+import { CreateAlbumForm } from "./create-album-form";
 
 export const metadata: Metadata = { title: "Albums" };
 
+type AlbumListItem = {
+  id: string;
+  name: string;
+  description: string | null;
+  coverPhotoId: string | null;
+  createdAt: string;
+  photoCount: number;
+};
+
 export default async function AlbumsPage() {
-  const albums = await listAlbums();
+  const albums = await apiGetRequired<AlbumListItem[]>("/api/albums");
 
   return (
     <div className="space-y-10">
@@ -19,22 +28,7 @@ export default async function AlbumsPage() {
         </p>
       </header>
 
-      <form action={createAlbum} className="card flex flex-wrap gap-3 p-5">
-        <input
-          name="name"
-          required
-          placeholder="Album name"
-          className="field flex-1 basis-48"
-        />
-        <input
-          name="description"
-          placeholder="Description (optional)"
-          className="field flex-1 basis-64"
-        />
-        <button type="submit" className="btn-primary">
-          Create album
-        </button>
-      </form>
+      <CreateAlbumForm />
 
       {albums.length === 0 ? (
         <div className="card px-6 py-16 text-center">

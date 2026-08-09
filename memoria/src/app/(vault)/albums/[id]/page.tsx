@@ -1,11 +1,30 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getAlbum } from "@/lib/queries";
-import { verifySession } from "@/lib/dal";
-import { deleteAlbum } from "@/lib/actions/photos";
+import { apiGet, apiGetRequired } from "@/lib/api-client";
+import type { SessionUser } from "@/lib/types";
 import { PhotoGrid } from "@/components/photo-grid";
 import { DeleteAlbumButton } from "./delete-album-button";
+
+type AlbumDetail = {
+  album: {
+    id: string;
+    name: string;
+    description: string | null;
+    coverPhotoId: string | null;
+    createdBy: string;
+    createdAt: string;
+  };
+  photos: {
+    id: string;
+    caption: string | null;
+    originalFilename: string;
+    width: number | null;
+    height: number | null;
+    takenAt: string | Date | null;
+    favorite: boolean;
+  }[];
+};
 
 export async function generateMetadata({
   params,
@@ -13,8 +32,9 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }>): Promise<Metadata> {
   const { id } = await params;
-  const result = await getAlbum(id);
-  return { title: result?.album.name ?? "Album" };
+  const result = await apiGet<AlbumDetail | null>(`/api/albums/${id}`);
+  if (!result) return { title: "Album" };
+  return { title: result.album.name };
 }
 
 export default async function AlbumPage({
@@ -23,7 +43,10 @@ export default async function AlbumPage({
   params: Promise<{ id: string }>;
 }>) {
   const { id } = await params;
-  const [user, result] = await Promise.all([verifySession(), getAlbum(id)]);
+  const [user, result] = await Promise.all([
+    apiGetRequired<SessionUser>("/api/me"),
+    apiGet<AlbumDetail | null>(`/api/albums/${id}`),
+  ]);
   if (!result) notFound();
 
   const { album, photos } = result;
@@ -48,9 +71,7 @@ export default async function AlbumPage({
             {album.description && ` · ${album.description}`}
           </p>
         </div>
-        {canDelete && (
-          <DeleteAlbumButton albumId={album.id} deleteAlbum={deleteAlbum} />
-        )}
+        {canDelete && <DeleteAlbumButton albumId={album.id} />}
       </header>
 
       {photos.length === 0 ? (

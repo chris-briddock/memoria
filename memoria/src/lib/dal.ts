@@ -2,13 +2,9 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import type { SessionUser } from "@/lib/types";
 
-export type SessionUser = {
-  id: string;
-  email: string;
-  name: string | null;
-  role: "admin" | "member";
-};
+export type { SessionUser };
 
 /**
  * The single place authorization is decided. Every server component, server

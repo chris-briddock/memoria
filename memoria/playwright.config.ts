@@ -22,6 +22,11 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
   globalSetup: "./e2e/global-setup.ts",
+  expect: {
+    // The dev server compiles routes on first request (Turbopack), so give
+    // expect/assertions enough headroom for the initial page load.
+    timeout: 30_000,
+  },
   use: {
     baseURL,
     trace: "retain-on-failure",
@@ -60,14 +65,18 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --port 3100",
+    command: `npm run dev -- --port ${PORT}`,
     url: baseURL,
+    // Reuse an existing dev server when debugging locally; CI always starts a
+    // fresh one.
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
       // Load .env.e2e into the dev-server process. Next.js would otherwise
       // read .env.local (the dev database) and the tests would touch real data.
       ...loadEnvE2e(),
+      // AUTH_URL must match the port the webServer actually boots on.
+      AUTH_URL: baseURL,
     },
   },
 });

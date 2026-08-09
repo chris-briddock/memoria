@@ -1,12 +1,13 @@
 import { Nav } from "@/components/nav";
-import { verifySession } from "@/lib/dal";
+import { apiGetRequired } from "@/lib/api-client";
+import type { SessionUser } from "@/lib/types";
 
 export default async function VaultLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await verifySession();
+  const user = await apiGetRequired<SessionUser>("/api/me");
 
   return (
     <>

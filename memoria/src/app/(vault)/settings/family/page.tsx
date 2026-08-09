@@ -1,14 +1,35 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/dal";
-import { listInvites, listMembers } from "@/lib/queries";
-import { createInvite, revokeInvite } from "@/lib/actions/photos";
+import { apiGetRequired } from "@/lib/api-client";
+import { CreateInviteForm } from "./create-invite-form";
 import { RevokeInviteButton } from "../revoke-invite-button";
 
 export const metadata: Metadata = { title: "Family" };
 
+type Invite = {
+  id: string;
+  code: string;
+  note: string | null;
+  claimedAt: string | Date | null;
+  expiresAt: string | Date | null;
+  createdAt: string | Date;
+};
+
+type Member = {
+  id: string;
+  name: string | null;
+  email: string;
+  role: "admin" | "member";
+  createdAt: string;
+  photoCount: number;
+};
+
 export default async function FamilyPage() {
   await requireAdmin();
-  const [invites, members] = await Promise.all([listInvites(), listMembers()]);
+  const [invites, members] = await Promise.all([
+    apiGetRequired<Invite[]>("/api/invites"),
+    apiGetRequired<Member[]>("/api/members"),
+  ]);
 
   const open = invites.filter((i) => !i.claimedAt);
   const used = invites.filter((i) => i.claimedAt);
@@ -30,16 +51,7 @@ export default async function FamilyPage() {
           Invites
         </h2>
 
-        <form action={createInvite} className="card flex flex-wrap gap-3 p-5">
-          <input
-            name="note"
-            placeholder="Who is this for? (optional)"
-            className="field flex-1 basis-64"
-          />
-          <button type="submit" className="btn-primary">
-            Create invite
-          </button>
-        </form>
+        <CreateInviteForm />
 
         {open.length === 0 ? (
           <p className="text-sm text-ink-faint">No unused invites.</p>
@@ -56,13 +68,10 @@ export default async function FamilyPage() {
                 <span className="text-sm text-ink-soft">{invite.note ?? "—"}</span>
                 <span className="ml-auto text-xs text-ink-faint">
                   {invite.expiresAt
-                    ? `Expires ${invite.expiresAt.toLocaleDateString("en-GB")}`
+                    ? `Expires ${new Date(invite.expiresAt).toLocaleDateString("en-GB")}`
                     : "No expiry"}
                 </span>
-                <RevokeInviteButton
-                  inviteId={invite.id}
-                  revokeInvite={revokeInvite}
-                />
+                <RevokeInviteButton inviteId={invite.id} />
               </li>
             ))}
           </ul>
@@ -79,7 +88,7 @@ export default async function FamilyPage() {
                   <code className="font-mono">{invite.code}</code>
                   {invite.note && ` · ${invite.note}`}
                   {invite.claimedAt &&
-                    ` · claimed ${invite.claimedAt.toLocaleDateString("en-GB")}`}
+                    ` · claimed ${new Date(invite.claimedAt).toLocaleDateString("en-GB")}`}
                 </li>
               ))}
             </ul>

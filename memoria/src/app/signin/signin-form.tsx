@@ -1,84 +1,92 @@
 "use client";
 
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import type { FormState } from "@/lib/action-types";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   OAuthButtons,
   type OAuthProviderInfo,
 } from "@/components/oauth-buttons";
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" className="btn-primary w-full" disabled={pending}>
-      {pending ? "Signing in…" : "Sign in"}
-    </button>
-  );
-}
+import { apiSubmit } from "@/lib/api-submit";
 
 export function SignInForm({
   next,
   oauthProviders,
-  signIn,
-  beginOAuth,
 }: Readonly<{
   next?: string;
   oauthProviders: OAuthProviderInfo[];
-  /** Server actions, passed by the server page so this bundle never imports them. */
-  signIn: (prev: FormState, formData: FormData) => Promise<FormState>;
-  beginOAuth: (prev: FormState, formData: FormData) => Promise<FormState>;
 }>) {
-  const [state, formAction] = useActionState(signIn, undefined);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setPending(true);
+    setError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const result = await apiSubmit<{ redirect?: string }>(`/api/auth/signin`, {
+      body: formData,
+    });
+
+    setPending(false);
+    if (!result.ok) {
+      setError(result.error ?? "Sign in failed.");
+    } else if (result.data?.redirect) {
+      router.push(result.data.redirect);
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <form action={formAction} className="card space-y-4 p-6">
-      <input type="hidden" name="next" value={next ?? "/"} />
+      <form onSubmit={handleSubmit} className="card space-y-4 p-6">
+        <input type="hidden" name="next" value={next ?? "/"} />
 
-      <div className="space-y-1.5">
-        <label htmlFor="email" className="text-sm font-medium text-ink-soft">
-          Email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          className="field"
-          placeholder="you@example.com"
-        />
-      </div>
+        <div className="space-y-1.5">
+          <label htmlFor="email" className="text-sm font-medium text-ink-soft">
+            Email
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            className="field"
+            placeholder="you@example.com"
+          />
+        </div>
 
-      <div className="space-y-1.5">
-        <label htmlFor="password" className="text-sm font-medium text-ink-soft">
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          className="field"
-        />
-      </div>
+        <div className="space-y-1.5">
+          <label htmlFor="password" className="text-sm font-medium text-ink-soft">
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            className="field"
+          />
+        </div>
 
-      {state?.error && (
-        <p role="alert" className="text-sm text-accent">
-          {state.error}
-        </p>
-      )}
+        {error && (
+          <p role="alert" className="text-sm text-accent">
+            {error}
+          </p>
+        )}
 
-        <SubmitButton />
+        <button type="submit" className="btn-primary w-full" disabled={pending}>
+          {pending ? "Signing in…" : "Sign in"}
+        </button>
       </form>
 
       {oauthProviders.length > 0 && (
         <>
           <div className="flex items-center gap-3 text-xs text-ink-faint">
             <span className="h-px flex-1 bg-line" />
-            or
+            <span>or</span>
             <span className="h-px flex-1 bg-line" />
           </div>
           <div className="card p-6">
@@ -86,7 +94,6 @@ export function SignInForm({
               providers={oauthProviders}
               verb="Sign in"
               next={next ?? "/"}
-              action={beginOAuth}
             />
           </div>
         </>

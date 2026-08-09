@@ -2,22 +2,16 @@
 
 import { useOptimistic, useTransition } from "react";
 import Link from "next/link";
+import { apiSubmit } from "@/lib/api-submit";
 
 export function AlbumPicker({
   photoId,
   albums,
   memberOf,
-  setPhotoAlbum,
 }: Readonly<{
   photoId: string;
   albums: { id: string; name: string }[];
   memberOf: string[];
-  /** Server action, passed by the server page so this bundle never imports it. */
-  setPhotoAlbum: (
-    photoId: string,
-    albumId: string,
-    shouldBeIn: boolean,
-  ) => Promise<void>;
 }>) {
   const [, startTransition] = useTransition();
   const [optimisticMembership, toggleOptimistic] = useOptimistic(
@@ -58,7 +52,17 @@ export function AlbumPicker({
                   onChange={() =>
                     startTransition(async () => {
                       toggleOptimistic(album.id);
-                      await setPhotoAlbum(photoId, album.id, !checked);
+                      if (checked) {
+                        await apiSubmit(`/api/photos/${photoId}/albums`, {
+                          method: "DELETE",
+                          body: JSON.stringify({ albumId: album.id }),
+                        });
+                      } else {
+                        await apiSubmit(`/api/photos/${photoId}/albums`, {
+                          method: "POST",
+                          body: JSON.stringify({ albumId: album.id }),
+                        });
+                      }
                     })
                   }
                 />

@@ -19,6 +19,8 @@ playwright-report/
 /.next/
 /out/
 
+
+
 # production
 /build
 

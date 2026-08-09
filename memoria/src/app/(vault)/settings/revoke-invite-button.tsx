@@ -1,16 +1,14 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { apiSubmit } from "@/lib/api-submit";
 
 export function RevokeInviteButton({
   inviteId,
-  revokeInvite,
-}: Readonly<{
-  inviteId: string;
-  /** Server action, passed by the server page so this bundle never imports it. */
-  revokeInvite: (inviteId: string) => Promise<void>;
-}>) {
+}: Readonly<{ inviteId: string }>) {
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   return (
     <button
@@ -19,7 +17,10 @@ export function RevokeInviteButton({
       disabled={isPending}
       onClick={() =>
         startTransition(async () => {
-          await revokeInvite(inviteId);
+          const result = await apiSubmit(`/api/invites/${inviteId}`, {
+            method: "DELETE",
+          });
+          if (result.ok) router.refresh();
         })
       }
     >

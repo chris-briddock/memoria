@@ -145,6 +145,11 @@ export async function listMembers() {
     .orderBy(users.createdAt);
 }
 
+export async function isBootstrapping() {
+  const anyUser = await db.select({ id: users.id }).from(users).limit(1);
+  return anyUser.length === 0;
+}
+
 export async function isPhotoInAlbum(albumId: string, photoId: string) {
   await verifySession();
   const row = await db.query.albumPhotos.findFirst({

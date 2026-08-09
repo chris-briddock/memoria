@@ -1,10 +1,30 @@
 import { Uploader } from "@/components/uploader";
 import { PhotoGrid, groupByMonth } from "@/components/photo-grid";
-import { getVaultStats, listPhotos } from "@/lib/queries";
+import { apiGetRequired } from "@/lib/api-client";
 import { formatBytes } from "@/lib/format";
 
+type PhotoListItem = {
+  id: string;
+  caption: string | null;
+  originalFilename: string;
+  width: number | null;
+  height: number | null;
+  takenAt: string | Date | null;
+  favorite: boolean;
+};
+
+type VaultStats = {
+  photos: number;
+  bytes: number;
+  albums: number;
+  members: number;
+};
+
 export default async function GalleryPage() {
-  const [photos, stats] = await Promise.all([listPhotos(), getVaultStats()]);
+  const [photos, stats] = await Promise.all([
+    apiGetRequired<PhotoListItem[]>("/api/photos"),
+    apiGetRequired<VaultStats>("/api/stats"),
+  ]);
   const months = groupByMonth(photos);
 
   return (

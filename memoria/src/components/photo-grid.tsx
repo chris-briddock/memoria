@@ -6,7 +6,7 @@ export type GridPhoto = {
   originalFilename: string;
   width: number | null;
   height: number | null;
-  takenAt: Date | null;
+  takenAt: string | Date | null;
   favorite: boolean;
 };
 
@@ -78,7 +78,7 @@ export function groupByMonth(photos: GridPhoto[]) {
   const groups = new Map<string, { label: string; photos: GridPhoto[] }>();
 
   for (const photo of photos) {
-    const date = photo.takenAt ?? new Date(0);
+    const date = photo.takenAt ? new Date(photo.takenAt) : new Date(0);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
     const label = date.toLocaleDateString("en-GB", {
       month: "long",

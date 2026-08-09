@@ -1,47 +1,64 @@
 "use client";
 
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import type { ProfileResult } from "@/lib/action-types";
+import { useState } from "react";
+import { apiSubmit } from "@/lib/api-submit";
 
-type ProfileAction = (
-  prev: ProfileResult,
-  formData: FormData,
-) => Promise<ProfileResult>;
-
-function SaveButton({ label, pendingLabel }: Readonly<{ label: string; pendingLabel: string }>) {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" className="btn-primary" disabled={pending}>
-      {pending ? pendingLabel : label}
-    </button>
-  );
-}
-
-function Feedback({ state }: Readonly<{ state: ProfileResult }>) {
-  if (state?.error) {
-    return (
-      <p role="alert" className="text-sm text-accent">
-        {state.error}
-      </p>
-    );
-  }
-  if (state?.success) {
-    return <p className="text-sm text-ink-faint">{state.success}</p>;
-  }
-  return null;
-}
-
-function NameForm({
+/**
+ * Display name and password management for the signed-in user.
+ * Submits via PATCH /api/me (name) and POST /api/me (password), replacing the
+ * `useActionState`/server-action pattern.
+ */
+export function ProfileSection({
   currentName,
-  updateName,
-}: Readonly<{ currentName: string | null; updateName: ProfileAction }>) {
-  const [state, formAction] = useActionState<ProfileResult, FormData>(
-    updateName,
-    undefined,
-  );
+  hasPassword,
+}: Readonly<{
+  currentName: string | null;
+  hasPassword: boolean;
+}>) {
   return (
-    <form action={formAction} className="card space-y-4 p-5">
+    <div className="grid gap-6 md:grid-cols-2">
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-ink-soft">Display name</h3>
+        <NameForm currentName={currentName} />
+      </div>
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-ink-soft">
+          {hasPassword ? "Change password" : "Set a password"}
+        </h3>
+        <PasswordForm hasPassword={hasPassword} />
+      </div>
+    </div>
+  );
+}
+
+function NameForm({ currentName }: Readonly<{ currentName: string | null }>) {
+  const [pending, setPending] = useState(false);
+  const [feedback, setFeedback] = useState<{
+    error?: string;
+    success?: string;
+  } | null>(null);
+
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setPending(true);
+    setFeedback(null);
+
+    const formData = new FormData(e.currentTarget);
+    const result = await apiSubmit<{ success?: string }>(`/api/me`, {
+      method: "PATCH",
+      body: formData,
+    });
+
+    setPending(false);
+    if (!result.ok) {
+      setFeedback({ error: result.error ?? "Update failed." });
+    } else {
+      setFeedback({ success: result.data?.success ?? "Name updated." });
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="card space-y-4 p-5">
       <div className="space-y-1.5">
         <label htmlFor="profile-name" className="text-sm font-medium text-ink-soft">
           Your name
@@ -56,22 +73,60 @@ function NameForm({
           placeholder="Chris"
         />
       </div>
-      <Feedback state={state} />
-      <SaveButton label="Save name" pendingLabel="Saving…" />
+      {feedback?.error && (
+        <p role="alert" className="text-sm text-accent">
+          {feedback.error}
+        </p>
+      )}
+      {feedback?.success && (
+        <p className="text-sm text-ink-faint">{feedback.success}</p>
+      )}
+      <button type="submit" className="btn-primary" disabled={pending}>
+        {pending ? "Saving…" : "Save name"}
+      </button>
     </form>
   );
 }
 
-function PasswordForm({
-  hasPassword,
-  changePassword,
-}: Readonly<{ hasPassword: boolean; changePassword: ProfileAction }>) {
-  const [state, formAction] = useActionState<ProfileResult, FormData>(
-    changePassword,
-    undefined,
-  );
+function PasswordForm({ hasPassword }: Readonly<{ hasPassword: boolean }>) {
+  const [pending, setPending] = useState(false);
+  const [feedback, setFeedback] = useState<{
+    error?: string;
+    success?: string;
+  } | null>(null);
+
+  let submitLabel = "Set password";
+  if (pending) {
+    submitLabel = "Saving…";
+  } else if (hasPassword) {
+    submitLabel = "Change password";
+  }
+
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault();
+    // Capture the form node synchronously: React nulls e.currentTarget once
+    // the event is released, which happens after the await below.
+    const form = e.currentTarget;
+    setPending(true);
+    setFeedback(null);
+
+    const formData = new FormData(form);
+    const result = await apiSubmit<{ success?: string }>(`/api/me`, {
+      method: "POST",
+      body: formData,
+    });
+
+    setPending(false);
+    if (!result.ok) {
+      setFeedback({ error: result.error ?? "Update failed." });
+    } else {
+      setFeedback({ success: result.data?.success ?? "Password saved." });
+      form.reset();
+    }
+  }
+
   return (
-    <form action={formAction} className="card space-y-4 p-5">
+    <form onSubmit={handleSubmit} className="card space-y-4 p-5">
       {hasPassword && (
         <div className="space-y-1.5">
           <label htmlFor="current-password" className="text-sm font-medium text-ink-soft">
@@ -122,40 +177,17 @@ function PasswordForm({
           className="field"
         />
       </div>
-      <Feedback state={state} />
-      <SaveButton
-        label={hasPassword ? "Change password" : "Set password"}
-        pendingLabel="Saving…"
-      />
+      {feedback?.error && (
+        <p role="alert" className="text-sm text-accent">
+          {feedback.error}
+        </p>
+      )}
+      {feedback?.success && (
+        <p className="text-sm text-ink-faint">{feedback.success}</p>
+      )}
+      <button type="submit" className="btn-primary" disabled={pending}>
+        {submitLabel}
+      </button>
     </form>
-  );
-}
-
-/** Display name and password management for the signed-in user. */
-export function ProfileSection({
-  currentName,
-  hasPassword,
-  updateName,
-  changePassword,
-}: Readonly<{
-  currentName: string | null;
-  hasPassword: boolean;
-  /** Server actions, passed by the server page so this bundle never imports them. */
-  updateName: ProfileAction;
-  changePassword: ProfileAction;
-}>) {
-  return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium text-ink-soft">Display name</h3>
-        <NameForm currentName={currentName} updateName={updateName} />
-      </div>
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium text-ink-soft">
-          {hasPassword ? "Change password" : "Set a password"}
-        </h3>
-        <PasswordForm hasPassword={hasPassword} changePassword={changePassword} />
-      </div>
-    </div>
   );
 }

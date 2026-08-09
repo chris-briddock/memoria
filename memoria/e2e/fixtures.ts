@@ -2,6 +2,12 @@ import path from "node:path";
 import pg from "pg";
 import type { Browser, BrowserContext } from "@playwright/test";
 
+const E2E_URL =
+  "postgresql://memoria:memoria_dev_password@localhost:5432/memoria_e2e";
+
+/** The base URL the browser targets (must match the dev server port). */
+export const E2E_BASE_URL = "http://localhost:3100";
+
 export const ADMIN = {
   name: "E2E Admin",
   email: "admin@e2e.dev",
@@ -23,9 +29,6 @@ export function authFile(persona: "admin" | "member"): string {
 export function fixtureImage(name: "plain.png" | "rotated.jpg" | "corrupt.jpg") {
   return path.join(__dirname, "..", "test", "fixtures", name);
 }
-
-const E2E_URL =
-  "postgresql://memoria:memoria_dev_password@localhost:5432/memoria_e2e";
 
 /**
  * Wipes user-generated rows so each spec starts from just the seeded accounts.
@@ -150,7 +153,7 @@ export async function userExists(email: string): Promise<boolean> {
  */
 export async function guestContext(browser: Browser): Promise<BrowserContext> {
   const context = await browser.newContext({
-    baseURL: "http://localhost:3100",
+    baseURL: E2E_BASE_URL,
     storageState: { cookies: [], origins: [] },
   });
   await context.clearCookies();

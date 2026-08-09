@@ -1,17 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { apiSubmit } from "@/lib/api-submit";
 
 export function DeleteAlbumButton({
   albumId,
-  deleteAlbum,
-}: Readonly<{
-  albumId: string;
-  /** Server action, passed by the server page so this bundle never imports it. */
-  deleteAlbum: (albumId: string) => Promise<void>;
-}>) {
+}: Readonly<{ albumId: string }>) {
+  const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   if (!confirming) {
     return (
@@ -30,7 +29,16 @@ export function DeleteAlbumButton({
         disabled={isPending}
         onClick={() =>
           startTransition(async () => {
-            await deleteAlbum(albumId);
+            const result = await apiSubmit(`/api/albums/${albumId}`, {
+              method: "DELETE",
+            });
+            if (!result.ok) {
+              setError(result.error);
+              return;
+            }
+            if (result.data && typeof result.data === "object" && "redirect" in result.data) {
+              router.push((result.data as { redirect: string }).redirect);
+            }
           })
         }
       >
@@ -39,6 +47,9 @@ export function DeleteAlbumButton({
       <button type="button" className="btn-ghost" onClick={() => setConfirming(false)}>
         Cancel
       </button>
+      {error && (
+        <span className="text-sm text-accent">{error}</span>
+      )}
     </div>
   );
 }

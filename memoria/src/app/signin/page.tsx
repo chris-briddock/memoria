@@ -1,10 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { count } from "drizzle-orm";
-import { db } from "@/db";
-import { users } from "@/db/schema";
+import { apiGetRequired } from "@/lib/api-client";
 import { allOAuthProviders } from "@/lib/oauth-providers";
-import { signInAction, beginOAuthSignIn } from "@/lib/actions/auth";
 import { SignInForm } from "./signin-form";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -39,7 +36,7 @@ export default async function SignInPage({
   const errorMessage = oauthErrorMessage(error);
 
   // On a brand new vault there is nobody to sign in as, so point at setup.
-  const [{ value: userCount }] = await db.select({ value: count() }).from(users);
+  const { bootstrap } = await apiGetRequired<{ bootstrap: boolean }>("/api/bootstrap");
 
   return (
     <main className="flex flex-1 items-center justify-center px-5 py-16">
@@ -49,13 +46,11 @@ export default async function SignInPage({
             Memoria<span className="text-accent">.</span>
           </h1>
           <p className="mt-2 text-sm text-ink-soft">
-            {userCount === 0
-              ? "Let's set up your family vault."
-              : "The family photo vault."}
+            {bootstrap ? "Let's set up your family vault." : "The family photo vault."}
           </p>
         </div>
 
-        {userCount === 0 ? (
+        {bootstrap ? (
           <div className="card p-6 text-center">
             <p className="text-sm text-ink-soft">
               No accounts exist yet. Create the first one to become the family
@@ -75,8 +70,6 @@ export default async function SignInPage({
             <SignInForm
               next={next}
               oauthProviders={allOAuthProviders()}
-              signIn={signInAction}
-              beginOAuth={beginOAuthSignIn}
             />
             <p className="mt-6 text-center text-sm text-ink-faint">
               Have an invite code?{" "}

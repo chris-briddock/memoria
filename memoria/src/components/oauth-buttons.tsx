@@ -1,8 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import type { FormState } from "@/lib/action-types";
 import type { OAuthProviderId } from "@/lib/oauth-providers";
 
 export type OAuthProviderInfo = {
@@ -30,35 +28,34 @@ function ProviderButton({
 
 /**
  * Renders one submit button per *configured* OAuth provider, posting to
- * `beginOAuthSignIn`. The server component decides which providers to show
- * (env-gated) and passes them in; the optional `inviteCode` / `next` hidden
- * fields let the register flow carry an invite through the OAuth round-trip.
- * Nothing renders if no provider is configured, so the UI degrades to
- * password-only.
+ * `/api/oauth/signin` (a route handler that throws the provider redirect the
+ * browser must follow — it cannot be a fetch() call). The optional
+ * `inviteCode` / `next` hidden fields let the register flow carry an invite
+ * through the OAuth round-trip. Nothing renders if no provider is configured,
+ * so the UI degrades to password-only.
+ *
+ * The form uses a normal navigation submit (no `fetch` interceptor) so the
+ * browser follows Auth.js's 302 to the provider and back. Any inline error
+ * (bad invite, provider unconfigured) comes back as JSON only if the route
+ * cannot start the redirect — in that case the route returns 4xx and the
+ * browser shows it; we do not intercept because the success path must be a
+ * full navigation.
  */
 export function OAuthButtons({
   providers,
   verb = "Continue",
   inviteCode,
   next,
-  action,
 }: Readonly<{
   providers: OAuthProviderInfo[];
   verb?: string;
   inviteCode?: string;
   next?: string;
-  /** The `beginOAuthSignIn` server action, passed by the parent server
-   *  component so this client bundle never imports the server module. */
-  action: (prev: FormState, formData: FormData) => Promise<FormState>;
 }>) {
-  const [state, formAction] = useActionState<FormState, FormData>(
-    action,
-    undefined,
-  );
   if (providers.length === 0) return null;
 
   return (
-    <form action={formAction} className="space-y-2">
+    <form action="/api/oauth/signin" method="post" className="space-y-2">
       {inviteCode !== undefined && (
         <input type="hidden" name="inviteCode" value={inviteCode} />
       )}
@@ -70,11 +67,6 @@ export function OAuthButtons({
           label={`${verb} with ${p.label}`}
         />
       ))}
-      {state?.error && (
-        <p role="alert" className="text-sm text-accent">
-          {state.error}
-        </p>
-      )}
     </form>
   );
 }

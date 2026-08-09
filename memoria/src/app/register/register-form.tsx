@@ -1,41 +1,48 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { useFormStatus } from "react-dom";
-import type { FormState } from "@/lib/action-types";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   OAuthButtons,
   type OAuthProviderInfo,
 } from "@/components/oauth-buttons";
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" className="btn-primary w-full" disabled={pending}>
-      {pending ? "Creating account…" : "Create account"}
-    </button>
-  );
-}
+import { apiSubmit } from "@/lib/api-submit";
 
 export function RegisterForm({
   requiresInvite,
   oauthProviders,
-  register,
-  beginOAuth,
 }: Readonly<{
   requiresInvite: boolean;
   oauthProviders: OAuthProviderInfo[];
-  /** Server actions, passed by the server page so this bundle never imports them. */
-  register: (prev: FormState, formData: FormData) => Promise<FormState>;
-  beginOAuth: (prev: FormState, formData: FormData) => Promise<FormState>;
 }>) {
-  const [state, formAction] = useActionState(register, undefined);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   // Controlled so the OAuth buttons can carry the same code through sign-in.
   const [inviteCode, setInviteCode] = useState("");
+  const router = useRouter();
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setPending(true);
+    setError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const result = await apiSubmit<{ redirect?: string }>(
+      `/api/auth/register`,
+      { body: formData },
+    );
+
+    setPending(false);
+    if (!result.ok) {
+      setError(result.error ?? "Registration failed.");
+    } else if (result.data?.redirect) {
+      router.push(result.data.redirect);
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <form action={formAction} className="card space-y-4 p-6">
+      <form onSubmit={handleSubmit} className="card space-y-4 p-6">
         {requiresInvite && (
           <div className="space-y-1.5">
             <label htmlFor="inviteCode" className="text-sm font-medium text-ink-soft">
@@ -91,13 +98,15 @@ export function RegisterForm({
           <p className="text-xs text-ink-faint">At least 10 characters.</p>
         </div>
 
-        {state?.error && (
+        {error && (
           <p role="alert" className="text-sm text-accent">
-            {state.error}
+            {error}
           </p>
         )}
 
-        <SubmitButton />
+        <button type="submit" className="btn-primary w-full" disabled={pending}>
+          {pending ? "Creating account…" : "Create account"}
+        </button>
       </form>
 
       {oauthProviders.length > 0 && (
@@ -119,7 +128,6 @@ export function RegisterForm({
               providers={oauthProviders}
               verb="Continue"
               inviteCode={inviteCode}
-              action={beginOAuth}
             />
             <p className="text-xs text-ink-faint">
               {requiresInvite

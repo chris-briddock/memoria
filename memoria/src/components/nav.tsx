@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { signOutAction } from "@/lib/actions/auth";
-import type { SessionUser } from "@/lib/dal";
+import type { SessionUser } from "@/lib/types";
+import { SignOutButton } from "@/components/sign-out-button";
 
 const links = [
   { href: "/", label: "Photos" },
@@ -41,11 +41,7 @@ export function Nav({ user }: Readonly<{ user: SessionUser }>) {
           <span className="hidden text-xs tracking-wide text-ink-faint sm:inline">
             {user.name ?? user.email}
           </span>
-          <form action={signOutAction}>
-            <button type="submit" className="btn-ghost min-h-9 px-3 py-1.5">
-              Sign out
-            </button>
-          </form>
+          <SignOutButton />
         </div>
       </div>
     </header>

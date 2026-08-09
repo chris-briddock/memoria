@@ -2,7 +2,7 @@ import NextAuth, { AuthError } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { count, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { Provider } from "next-auth/providers";
@@ -42,10 +42,12 @@ const baseAdapter = DrizzleAdapter(db, {
 const adapter: typeof baseAdapter = {
   ...baseAdapter,
   async createUser(data) {
-    const [{ value: userCount }] = await db
-      .select({ value: count() })
-      .from(users);
-    const isBootstrap = userCount === 0;
+    // Existence check, not COUNT(*): the bootstrap decision only needs to
+    // know if the users table is empty. COUNT(*) forces a full table scan
+    // (Postgres MVCC can't satisfy it from an index), which gets expensive
+    // as the vault grows; LIMIT 1 returns instantly and stays O(1).
+    const existing = await db.select({ id: users.id }).from(users).limit(1);
+    const isBootstrap = existing.length === 0;
 
     let inviteId: string | null = null;
     if (!isBootstrap) {

@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -19,7 +23,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     }
   },
   "include": [
@@ -28,7 +34,21 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    "/home/chris/Projects/Memoria/memoria/.next/w2/types/**/*.ts",
+    "/home/chris/Projects/Memoria/memoria/.next/w2/dev/types/**/*.ts",
+    "/home/chris/Projects/Memoria/memoria/.next/w1/types/**/*.ts",
+    "/home/chris/Projects/Memoria/memoria/.next/w1/dev/types/**/*.ts",
+    "/home/chris/Projects/Memoria/memoria/.next/w0/types/**/*.ts",
+    "/home/chris/Projects/Memoria/memoria/.next/w0/dev/types/**/*.ts",
+    "/home/chris/Projects/Memoria/memoria/.next/w3/types/**/*.ts",
+    "/home/chris/Projects/Memoria/memoria/.next/w3/dev/types/**/*.ts",
+    "/home/chris/Projects/Memoria/memoria/.next/w4/types/**/*.ts",
+    "/home/chris/Projects/Memoria/memoria/.next/w4/dev/types/**/*.ts",
+    "/home/chris/Projects/Memoria/memoria/.next/w5/types/**/*.ts",
+    "/home/chris/Projects/Memoria/memoria/.next/w5/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules"
+  ]
 }

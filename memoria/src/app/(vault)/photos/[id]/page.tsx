@@ -1,19 +1,35 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getPhoto, listAlbums, albumsForPhoto } from "@/lib/queries";
-import { verifySession } from "@/lib/dal";
-import {
-  deletePhoto,
-  setPhotoAlbum,
-  toggleFavorite,
-  updateCaption,
-} from "@/lib/actions/photos";
+import { apiGet, apiGetRequired } from "@/lib/api-client";
+import type { SessionUser } from "@/lib/types";
 import { PhotoActions } from "./photo-actions";
 import { AlbumPicker } from "./album-picker";
 import { formatBytes } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Photo" };
+
+type PhotoDetail = {
+  photo: {
+    id: string;
+    caption: string | null;
+    originalFilename: string;
+    width: number | null;
+    height: number | null;
+    byteSize: number;
+    mimeType: string;
+    takenAt: string | Date | null;
+    favorite: boolean;
+    uploadedBy: string;
+  };
+  uploaderName: string | null;
+  uploaderEmail: string;
+};
+
+type AlbumListItem = {
+  id: string;
+  name: string;
+};
 
 export default async function PhotoPage({
   params,
@@ -21,13 +37,16 @@ export default async function PhotoPage({
   params: Promise<{ id: string }>;
 }>) {
   const { id } = await params;
-  const [user, row] = await Promise.all([verifySession(), getPhoto(id)]);
+  const [user, row] = await Promise.all([
+    apiGetRequired<SessionUser>("/api/me"),
+    apiGet<PhotoDetail | null>(`/api/photos/${id}`),
+  ]);
   if (!row) notFound();
 
   const { photo, uploaderName, uploaderEmail } = row;
   const [allAlbums, memberOf] = await Promise.all([
-    listAlbums(),
-    albumsForPhoto(photo.id),
+    apiGetRequired<AlbumListItem[]>("/api/albums"),
+    apiGetRequired<AlbumListItem[]>(`/api/photos/${photo.id}/albums`),
   ]);
 
   const canDelete = photo.uploadedBy === user.id || user.role === "admin";
@@ -68,16 +87,12 @@ export default async function PhotoPage({
             favorite={photo.favorite}
             caption={photo.caption}
             canDelete={canDelete}
-            updateCaption={updateCaption}
-            toggleFavorite={toggleFavorite}
-            deletePhoto={deletePhoto}
           />
 
           <AlbumPicker
             photoId={photo.id}
             albums={allAlbums.map((a) => ({ id: a.id, name: a.name }))}
             memberOf={memberOf.map((a) => a.id)}
-            setPhotoAlbum={setPhotoAlbum}
           />
 
           <dl className="border-t border-line">
@@ -85,7 +100,7 @@ export default async function PhotoPage({
               label="Taken"
               value={
                 photo.takenAt
-                  ? photo.takenAt.toLocaleString("en-GB", {
+                  ? new Date(photo.takenAt).toLocaleString("en-GB", {
                       dateStyle: "full",
                       timeStyle: "short",
                     })
