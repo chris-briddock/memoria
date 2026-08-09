@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { VersionBadge } from "@/components/version-badge";
 import "./globals.css";
 
@@ -34,6 +35,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col bg-paper font-sans text-ink">
         {children}
         <VersionBadge />
+        <Analytics />
       </body>
     </html>
   );
