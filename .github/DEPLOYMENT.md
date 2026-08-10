@@ -111,6 +111,7 @@ Set these in **Vercel → Project → Settings → Environment Variables**:
 | `S3_BUCKET`               | `memoria-photos`                                             |
 | `S3_ACCESS_KEY_ID`        | B2 application key ID                                        |
 | `S3_SECRET_ACCESS_KEY`    | B2 application key                                           |
+| `S3_REPLICA_*`            | Optional: same five vars prefixed `S3_REPLICA_` — a second provider that every upload is also written to (see below) |
 | `MEMORIA_BOOTSTRAP_EMAIL` | Optional: always treat this email as admin on first register |
 | `AUTH_GOOGLE_ID`          | Optional: Google OAuth client ID (see below)                 |
 | `AUTH_GOOGLE_SECRET`      | Optional: Google OAuth client secret                         |
