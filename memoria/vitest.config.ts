@@ -25,7 +25,11 @@ export default defineConfig({
     fileParallelism: false,
     coverage: {
       provider: "v8",
-      include: ["src/lib/**", "src/components/photo-grid.tsx"],
+      include: [
+        "src/lib/**",
+        "src/components/photo-grid.tsx",
+        "src/components/nav-links.ts",
+      ],
       thresholds: {
         lines: 90,
         branches: 90,
