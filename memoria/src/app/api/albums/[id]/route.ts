@@ -6,6 +6,9 @@ import { db } from "@/db";
 import { albums } from "@/db/schema";
 import { verifySession } from "@/lib/dal";
 import { getAlbum } from "@/lib/queries";
+import { logger } from "@/lib/logger";
+
+const log = logger("api.albums");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +42,11 @@ export async function DELETE(
   }
 
   if (album.createdBy !== user.id && user.role !== "admin") {
+    log.warn("album delete denied: not owner or admin", {
+      album_id: album.id,
+      owner_id: album.createdBy,
+      user_id: user.id,
+    });
     return NextResponse.json(
       { error: "You can only delete albums you created." },
       { status: 403 },
@@ -47,6 +55,13 @@ export async function DELETE(
 
   // album_photos cascades; the photos themselves are untouched.
   await db.delete(albums).where(eq(albums.id, aid.data));
+
+  log.info("album deleted", {
+    album_id: album.id,
+    owner_id: album.createdBy,
+    deleted_by: user.id,
+    deleted_by_admin: album.createdBy !== user.id,
+  });
 
   revalidatePath("/albums");
 

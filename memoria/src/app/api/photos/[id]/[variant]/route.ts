@@ -4,6 +4,9 @@ import { db } from "@/db";
 import { photos } from "@/db/schema";
 import { verifySession } from "@/lib/dal";
 import { getObjectStream } from "@/lib/storage";
+import { logger } from "@/lib/logger";
+
+const log = logger("api.photos.stream");
 
 export const runtime = "nodejs";
 
@@ -47,7 +50,10 @@ export async function GET(
           : {}),
       },
     });
-  } catch {
+  } catch (err) {
+    // Storage misses used to vanish into a bare 404 — keep the record so a
+    // missing/key-mismatched object is diagnosable from the log backend.
+    log.error("failed to stream photo object", { photo_id: id, variant, key }, err);
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 }

@@ -6,6 +6,9 @@ import { db } from "@/db";
 import { albumPhotos, albums } from "@/db/schema";
 import { verifySession } from "@/lib/dal";
 import { albumsForPhoto } from "@/lib/queries";
+import { logger } from "@/lib/logger";
+
+const log = logger("api.photos.albums");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +46,8 @@ export async function POST(
     .insert(albumPhotos)
     .values({ albumId: aid.data, photoId: pid.data })
     .onConflictDoNothing();
+
+  log.debug("photo added to album", { photo_id: pid.data, album_id: aid.data });
 
   // Give a new album a cover the moment it gets its first photo.
   await db

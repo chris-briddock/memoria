@@ -6,6 +6,9 @@ import { invites } from "@/db/schema";
 import { verifySession } from "@/lib/dal";
 import { listInvites } from "@/lib/queries";
 import { field } from "@/lib/form";
+import { logger } from "@/lib/logger";
+
+const log = logger("api.invites");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +28,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = await verifySession();
   if (user.role !== "admin") {
+    log.warn("invite creation denied: not an admin", { user_id: user.id, role: user.role });
     return NextResponse.json(
       { error: "Only an admin can create invites." },
       { status: 403 },
@@ -52,6 +56,12 @@ export async function POST(request: Request) {
     note: note ? note.slice(0, 200) : null,
     createdBy: user.id,
     expiresAt,
+  });
+
+  log.info("invite created", {
+    admin_user_id: user.id,
+    has_note: Boolean(note),
+    expires_at: expiresAt.toISOString(),
   });
 
   revalidatePath("/settings/family");

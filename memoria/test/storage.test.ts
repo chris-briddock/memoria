@@ -148,6 +148,7 @@ describe("putObject", () => {
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("replica put failed"),
       expect.anything(),
+      expect.anything(),
     );
   });
 
@@ -204,6 +205,7 @@ describe("getObjectStream", () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("falling back to replica"),
       expect.anything(),
+      expect.anything(),
     );
   });
 
@@ -256,6 +258,7 @@ describe("deleteObjects", () => {
     await expect(deleteObjects(KEYS)).resolves.toBeUndefined();
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("replica delete failed"),
+      expect.anything(),
       expect.anything(),
     );
   });

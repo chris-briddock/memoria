@@ -8,6 +8,9 @@ import { verifySession } from "@/lib/dal";
 import { deleteObjects } from "@/lib/storage";
 import { getPhoto } from "@/lib/queries";
 import { field } from "@/lib/form";
+import { logger } from "@/lib/logger";
+
+const log = logger("api.photos");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,6 +76,11 @@ export async function DELETE(
   }
 
   if (photo.uploadedBy !== user.id && user.role !== "admin") {
+    log.warn("photo delete denied: not owner or admin", {
+      photo_id: photo.id,
+      owner_id: photo.uploadedBy,
+      user_id: user.id,
+    });
     return NextResponse.json(
       { error: "You can only delete photos you uploaded." },
       { status: 403 },
@@ -81,6 +89,13 @@ export async function DELETE(
 
   await db.delete(photos).where(eq(photos.id, uuid.data));
   await deleteObjects([photo.storageKey, photo.thumbKey]);
+
+  log.info("photo deleted", {
+    photo_id: photo.id,
+    owner_id: photo.uploadedBy,
+    deleted_by: user.id,
+    deleted_by_admin: photo.uploadedBy !== user.id,
+  });
 
   revalidatePath("/");
 

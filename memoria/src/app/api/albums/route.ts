@@ -5,6 +5,9 @@ import { albums } from "@/db/schema";
 import { verifySession } from "@/lib/dal";
 import { listAlbums } from "@/lib/queries";
 import { field } from "@/lib/form";
+import { logger } from "@/lib/logger";
+
+const log = logger("api.albums");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +40,8 @@ export async function POST(request: Request) {
       createdBy: user.id,
     })
     .returning({ id: albums.id });
+
+  log.info("album created", { album_id: album.id, user_id: user.id });
 
   revalidatePath("/albums");
 
