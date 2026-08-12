@@ -43,12 +43,22 @@ export default defineConfig({
       dependencies: ["setup"],
     },
     // Default persona: the bootstrap admin. Excludes the files claimed by the
-    // anonymous and member projects so each spec runs exactly once.
+    // anonymous, member and mobile projects so each spec runs exactly once.
     {
       name: "admin",
-      testIgnore: [/(auth|members)\.spec\.ts/],
+      testIgnore: [/(auth|members|mobile)\.spec\.ts/],
       use: {
         ...devices["Desktop Chrome"],
+        storageState: "e2e/.auth/admin.json",
+      },
+      dependencies: ["setup"],
+    },
+    // Phone-sized viewport coverage: responsive navigation, touch layout.
+    {
+      name: "mobile",
+      testMatch: /mobile\.spec\.ts/,
+      use: {
+        ...devices["Pixel 7"],
         storageState: "e2e/.auth/admin.json",
       },
       dependencies: ["setup"],
