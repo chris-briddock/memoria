@@ -30,8 +30,13 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid invite id" }, { status: 400 });
   }
 
-  await db.delete(invites).where(eq(invites.id, iid.data));
-  log.info("invite revoked", { invite_id: iid.data, admin_user_id: user.id });
+  const deleted = await db
+    .delete(invites)
+    .where(eq(invites.id, iid.data))
+    .returning({ id: invites.id });
+  if (deleted.length > 0) {
+    log.info("invite revoked", { invite_id: iid.data, admin_user_id: user.id });
+  }
   revalidatePath("/settings/family");
 
   return NextResponse.json({ ok: true });

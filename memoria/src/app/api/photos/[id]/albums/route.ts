@@ -42,12 +42,15 @@ export async function POST(
     return NextResponse.json({ error: "Invalid album id" }, { status: 400 });
   }
 
-  await db
+  const inserted = await db
     .insert(albumPhotos)
     .values({ albumId: aid.data, photoId: pid.data })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ albumId: albumPhotos.albumId });
 
-  log.debug("photo added to album", { photo_id: pid.data, album_id: aid.data });
+  if (inserted.length > 0) {
+    log.debug("photo added to album", { photo_id: pid.data, album_id: aid.data });
+  }
 
   // Give a new album a cover the moment it gets its first photo.
   await db

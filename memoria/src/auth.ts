@@ -78,12 +78,14 @@ async function createUserWithInviteGate(
       const code = await readOAuthInviteCookie();
       if (!code) {
         log.warn("oauth account creation rejected: no invite cookie present");
+        await clearOAuthInviteCookie();
+        throw new OAuthInviteRequired(
+          "A valid invite code is required to join.",
+        );
       }
-      const invite = code ? await findRedeemableInvite(code) : null;
+      const invite = await findRedeemableInvite(code);
       if (!invite) {
-        log.warn("oauth account creation rejected: invite not redeemable", {
-          had_cookie: Boolean(code),
-        });
+        log.warn("oauth account creation rejected: invite not redeemable");
         await clearOAuthInviteCookie();
         throw new OAuthInviteRequired(
           "A valid invite code is required to join.",
@@ -111,13 +113,6 @@ async function createUserWithInviteGate(
       })
       .returning();
 
-    log.info("oauth user created", {
-      user_id: user.id,
-      role,
-      is_bootstrap: isBootstrap,
-      used_invite: Boolean(inviteId),
-    });
-
     if (inviteId) {
       const won = await claimInvite(inviteId, user.id);
       await clearOAuthInviteCookie();
@@ -134,6 +129,13 @@ async function createUserWithInviteGate(
         );
       }
     }
+
+    log.info("oauth user created", {
+      user_id: user.id,
+      role,
+      is_bootstrap: isBootstrap,
+      used_invite: Boolean(inviteId),
+    });
 
     return {
       id: user.id,
@@ -187,16 +189,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // Never log passwords; whether the email exists is deliberately not
           // distinguished in the message so the log can't be a user-enumeration
           // oracle beyond what the timing already leaks.
-          log.warn("credentials sign-in failed: unknown email or no password set", {
-            email: normalizedEmail,
-          });
+          log.warn("credentials sign-in failed: unknown email or no password set");
           return null;
         }
 
         const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) {
           log.warn("credentials sign-in failed: wrong password", {
-            email: normalizedEmail,
             user_id: user.id,
           });
           return null;
@@ -204,7 +203,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         log.info("credentials sign-in succeeded", {
           user_id: user.id,
-          email: normalizedEmail,
           role: user.role,
         });
         return {

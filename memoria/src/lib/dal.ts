@@ -29,11 +29,10 @@ export const verifySession = cache(async (): Promise<SessionUser> => {
 /** Like `verifySession` but returns null instead of redirecting. */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   const session = await auth();
+  // No telemetry here: this runs for every anonymous page view, so it would
+  // drown the signal. Sampled logging belongs at routes where anonymous
+  // access is unexpected.
   if (!session?.user?.id) {
-    // Expected for anonymous traffic — debug, not warn — but recorded: a wave
-    // of these against a route that should only see members is the first
-    // signal of a broken session or an attack.
-    log.debug("no session found for request");
     return null;
   }
   return {

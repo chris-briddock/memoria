@@ -62,7 +62,7 @@ export async function POST(request: Request) {
 
   const existing = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (existing) {
-    log.info("registration rejected: email already registered", { email });
+    log.info("registration rejected: email already registered");
     return NextResponse.json({ error: "An account with that email already exists." }, { status: 400 });
   }
 
@@ -70,13 +70,13 @@ export async function POST(request: Request) {
 
   if (!isBootstrap) {
     if (!inviteCode) {
-      log.info("registration rejected: invite code missing", { email });
+      log.info("registration rejected: invite code missing");
       return NextResponse.json({ error: "An invite code is required." }, { status: 400 });
     }
 
     const invite = await findRedeemableInvite(inviteCode);
     if (!invite) {
-      log.info("registration rejected: invite not redeemable", { email });
+      log.info("registration rejected: invite not redeemable");
       return NextResponse.json({ error: "That invite code is not valid or has been used." }, { status: 400 });
     }
     claimedInviteId = invite.id;
@@ -112,7 +112,6 @@ export async function POST(request: Request) {
 
   log.info("user registered", {
     user_id: user.id,
-    email,
     role,
     is_bootstrap: isBootstrap,
     used_invite: Boolean(claimedInviteId),

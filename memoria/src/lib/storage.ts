@@ -143,7 +143,7 @@ export function objectKey(checksum: string, variant: "orig" | "thumb", ext: stri
  */
 function reportReplicaFailure(op: string, key: string, err: unknown): void {
   log.error(
-    `replica ${op} failed; primary succeeded, replica is now missing this object`,
+    `replica ${op} failed; primary succeeded, replica has drifted (out of sync)`,
     { op, key },
     err,
   );

@@ -36,7 +36,15 @@ export async function POST(request: Request) {
             "enduser.id": user.id,
           });
           try {
-            return await ingestPhoto(file, user.id);
+            const result = await ingestPhoto(file, user.id);
+            span.setAttribute("ingest.status", result.status);
+            if (result.status === "failed") {
+              span.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: result.reason,
+              });
+            }
+            return result;
           } catch (err) {
             span.setStatus({
               code: SpanStatusCode.ERROR,

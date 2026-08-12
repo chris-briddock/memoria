@@ -79,9 +79,9 @@ const db = {
     accounts: { findMany: vi.fn() },
   },
   select: vi.fn(() => makeChain([])),
-  update: vi.fn(() => makeChain(undefined)),
-  insert: vi.fn(() => makeChain(undefined)),
-  delete: vi.fn(() => makeChain(undefined)),
+  update: vi.fn(() => makeChain([])),
+  insert: vi.fn(() => makeChain([])),
+  delete: vi.fn(() => makeChain([])),
 };
 
 vi.mock("@/db", () => ({ db }));

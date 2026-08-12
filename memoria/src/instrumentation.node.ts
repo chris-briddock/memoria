@@ -43,9 +43,13 @@ if (tracesEndpoint || logsEndpoint) {
 
   const sdk = new NodeSDK({
     resource,
-    spanProcessor: tracesEndpoint
-      ? new BatchSpanProcessor(new OTLPTraceExporter({ url: tracesEndpoint }))
-      : undefined,
+    // Explicitly disable defaults: without spanProcessors/metricReaders, the
+    // SDK falls back to env-derived implicit exporters, and this integration
+    // must export traces only via BatchSpanProcessor and no metrics at all.
+    spanProcessors: tracesEndpoint
+      ? [new BatchSpanProcessor(new OTLPTraceExporter({ url: tracesEndpoint }))]
+      : [],
+    metricReaders: [],
     logRecordProcessors: logsEndpoint
       ? [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter({ url: logsEndpoint }) })]
       : [],
