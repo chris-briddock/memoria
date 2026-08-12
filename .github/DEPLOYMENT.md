@@ -104,7 +104,7 @@ Set these in **Vercel → Project → Settings → Environment Variables**:
 | ------------------------- | ------------------------------------------------------------ |
 | `DATABASE_URL`            | Neon pooled connection string                                |
 | `AUTH_SECRET`             | `openssl rand -hex 32`                                       |
-| `AUTH_URL`                | `https://<your-domain>` (production URL)                     |
+| `AUTH_URL`                | `https://<your-domain>` — **required in production**         |
 | `AUTH_TRUST_HOST`         | `true`                                                       |
 | `S3_ENDPOINT`             | `https://s3.<region>.backblazeb2.com`                        |
 | `S3_REGION`               | B2 region, e.g. `us-west-004`                                |
@@ -131,6 +131,15 @@ record also stays on stdout for `vercel logs`.
 
 These mirror the names in [`memoria/.env.e2e`](../memoria/.env.e2e) and
 [`memoria/.env.example`](../memoria/.env.example); keep real values out of git.
+
+> `AUTH_URL` is not optional when serving over real infrastructure. Without it,
+> Auth.js reconstructs the site origin from incoming request headers when
+> issuing a credentials sign-in; on runtimes that invoke the route with a
+> relative request URL (no usable `host`/`x-forwarded-host`) that throws
+> `TypeError: Invalid URL` (`ERR_INVALID_URL`) and sign-in fails with a 500.
+> The app also refuses to boot in production if `AUTH_URL`/`NEXTAUTH_URL` is
+> missing, so a misconfigured deploy fails the build/start rather than the
+> first login.
 
 ## 3a. OAuth sign-in (optional)
 

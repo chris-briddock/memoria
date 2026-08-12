@@ -18,6 +18,29 @@ import { logger } from "@/lib/logger";
 
 const log = logger("auth");
 
+// Auth.js's signIn()/signOut() server actions build an internal absolute URL
+// via createActionURL, which reads process.env.AUTH_URL first and only then
+// falls back to reconstructing from incoming host/x-forwarded-host headers.
+// On runtimes that invoke route handlers with a relative request URL (no host
+// header), that fallback produces `protocol//undefined` and throws
+// TypeError: Invalid URL (ERR_INVALID_URL) — exactly the production failure
+// seen at /api/auth/signin. Fail fast and loudly here instead of a cryptic
+// 500 at first login: AUTH_URL is required when serving in production.
+// NEXT_PHASE is set during `next build` (when NODE_ENV is also production but
+// no AUTH_URL is configured for page-data collection) — only enforce this
+// when the server is actually running and accepting requests.
+if (
+  process.env.NODE_ENV === "production" &&
+  !process.env.NEXT_PHASE &&
+  !process.env.AUTH_URL &&
+  !process.env.NEXTAUTH_URL
+) {
+  throw new Error(
+    "AUTH_URL must be set in production (e.g. https://your-domain). " +
+      "Auth.js cannot reconstruct the site origin and would throw Invalid URL on sign-in.",
+  );
+}
+
 const credentialsSchema = z.object({
   email: z.email(),
   password: z.string().min(1),
