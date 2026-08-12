@@ -14,7 +14,7 @@
  */
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { resourceFromAttributes } from "@opentelemetry/resources";
+import { defaultResource, resourceFromAttributes } from "@opentelemetry/resources";
 import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-node";
@@ -34,12 +34,16 @@ if (tracesEndpoint || logsEndpoint) {
   // An empty string is set-but-invalid: it would hide every log/span from the
   // resource filter in Aspire, since it indexes by service.name.
   const serviceName = process.env.OTEL_SERVICE_NAME?.trim() || "memoria";
-  const resource = resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: serviceName,
-    [ATTR_SERVICE_VERSION]: process.env.APP_VERSION ?? "unknown",
-    "deployment.environment.name":
-      process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
-  });
+  // Merge onto the SDK defaults so telemetry.sdk.* and other default
+  // attributes survive; custom service/version/environment win on conflict.
+  const resource = defaultResource().merge(
+    resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: serviceName,
+      [ATTR_SERVICE_VERSION]: process.env.APP_VERSION ?? "unknown",
+      "deployment.environment.name":
+        process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
+    }),
+  );
 
   const sdk = new NodeSDK({
     resource,

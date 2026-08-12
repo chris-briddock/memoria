@@ -210,12 +210,27 @@ export async function getObjectStream(key: string) {
   try {
     return await get(primary);
   } catch (err) {
+    // NoSuchKey is a definitive "not found" — don't waste a replica call on
+    // objects that simply don't exist. This halves 404 latency and avoids
+    // noisy warn logs for expected misses (deleted photos, staging rows
+    // without files).
+    const name = (err as { name?: string }).name;
+    if (name === "NoSuchKey" || name === "NotFound") {
+      throw err;
+    }
+    
     if (!replica) throw err;
     log.warn("primary read failed, falling back to replica", { key }, err);
-    // A replica miss here means the object was never replicated (or the
-    // replica is down too) — either way the caller sees the throw, same as a
-    // single-backend miss.
-    return get(replica);
+    // Replica missing the same key is expected drift (primary crashed between
+    // put and replicate). Don't log error for expected inconsistency.
+    try {
+      return await get(replica);
+    } catch (replicaErr) {
+      if ((replicaErr as { name?: string }).name === "NoSuchKey") {
+        throw replicaErr; // Silent 404 - caller handles
+      }
+      throw replicaErr;
+    }
   }
 }
 
