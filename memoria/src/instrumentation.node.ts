@@ -47,7 +47,7 @@ if (tracesEndpoint || logsEndpoint) {
       ? new BatchSpanProcessor(new OTLPTraceExporter({ url: tracesEndpoint }))
       : undefined,
     logRecordProcessors: logsEndpoint
-      ? [new BatchLogRecordProcessor(new OTLPLogExporter({ url: logsEndpoint }))]
+      ? [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter({ url: logsEndpoint }) })]
       : [],
   });
   sdk.start();

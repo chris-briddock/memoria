@@ -13,7 +13,7 @@ import { logs, SeverityNumber } from "@opentelemetry/api-logs";
  * Import one logger per module with a short, stable name:
  *
  *   const log = logger("storage");
- *   log.error("replica put failed", err, { key });
+ *   log.error("replica put failed", { key }, err);
  */
 
 type Fields = Record<string, string | number | boolean | null | undefined>;
@@ -37,6 +37,15 @@ const CONSOLE: Record<Level, (msg: string, ...rest: unknown[]) => void> = {
 function errorFields(err: unknown): Fields {
   if (err instanceof Error) {
     return { "error.name": err.name, "error.message": err.message, "error.stack": err.stack };
+  }
+  if (typeof err === "object" && err !== null) {
+    // String(err) on a plain object yields "[object Object]", which is useless
+    // in a log backend. Serialize so the actual payload is visible.
+    try {
+      return { "error.message": JSON.stringify(err) };
+    } catch {
+      return { "error.message": String(err) };
+    }
   }
   return { "error.message": String(err) };
 }
