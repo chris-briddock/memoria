@@ -115,6 +115,19 @@ Set these in **Vercel → Project → Settings → Environment Variables**:
 | `MEMORIA_BOOTSTRAP_EMAIL` | Optional: always treat this email as admin on first register |
 | `AUTH_GOOGLE_ID`          | Optional: Google OAuth client ID (see below)                 |
 | `AUTH_GOOGLE_SECRET`      | Optional: Google OAuth client secret                         |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Optional: OTLP/HTTP base URL for traces+logs export (see below) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Optional: comma-separated `k=v` auth headers for the exporter (e.g. an Axiom token) |
+| `OTEL_SERVICE_NAME`       | Optional: service name reported to the backend (default `memoria`) |
+
+### Telemetry (optional)
+
+Vercel's built-in function logs drop context aggressively; for real debugging,
+set the `OTEL_*` vars above and point them at any OTLP/HTTP backend — Axiom,
+Honeycomb, Grafana Cloud, or a self-hosted collector. When none are set the
+SDK is never started, so an un-instrumented deploy behaves exactly as before.
+Next.js's own request/route spans plus the app's structured logs (upload,
+storage, photo streaming) then land together in one trace tree, and every log
+record also stays on stdout for `vercel logs`.
 
 These mirror the names in [`memoria/.env.e2e`](../memoria/.env.e2e) and
 [`memoria/.env.example`](../memoria/.env.example); keep real values out of git.

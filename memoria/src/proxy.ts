@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { logger } from "@/lib/logger";
+
+const log = logger("proxy");
 
 const PUBLIC_PATHS = ["/signin", "/register"];
 
@@ -21,12 +24,16 @@ export function proxy(request: NextRequest) {
   );
 
   if (!hasSessionCookie && !isPublic) {
+    // Expected for signed-out visitors, so debug not warn — but a spike of
+    // these on deep links is how you notice an expiring-session bug.
+    log.debug("redirecting unauthenticated request to signin", { path: pathname });
     const signin = new URL("/signin", request.url);
     signin.searchParams.set("next", pathname);
     return NextResponse.redirect(signin);
   }
 
   if (hasSessionCookie && isPublic) {
+    log.debug("redirecting authenticated user away from public page", { path: pathname });
     return NextResponse.redirect(new URL("/", request.url));
   }
 

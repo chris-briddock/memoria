@@ -4,6 +4,9 @@ import { findRedeemableInvite, setOAuthInviteCookie } from "@/lib/oauth";
 import { OAUTH_PROVIDERS } from "@/lib/oauth-providers";
 import { signIn } from "@/auth";
 import { field } from "@/lib/form";
+import { logger } from "@/lib/logger";
+
+const log = logger("api.oauth.signin");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +30,7 @@ export async function POST(request: Request) {
   const redirectTo = next.startsWith("/") ? next : "/";
 
   if (provider !== "google") {
+    log.warn("oauth sign-in rejected: unknown provider", { provider });
     return NextResponse.json(
       { error: "Unknown sign-in provider." },
       { status: 400 },
@@ -34,6 +38,8 @@ export async function POST(request: Request) {
   }
 
   if (!OAUTH_PROVIDERS.find((p) => p.id === provider)?.enabled) {
+    // Misconfiguration rather than user error: env vars are missing.
+    log.warn("oauth sign-in rejected: provider not configured", { provider });
     return NextResponse.json(
       { error: "Sign-in with Google is not configured on this server yet." },
       { status: 400 },
@@ -43,6 +49,7 @@ export async function POST(request: Request) {
   if (inviteCode) {
     const invite = await findRedeemableInvite(inviteCode);
     if (!invite) {
+      log.info("oauth sign-in rejected: invite not redeemable", { provider });
       return NextResponse.json(
         { error: "That invite code is not valid or has been used." },
         { status: 400 },
@@ -51,11 +58,18 @@ export async function POST(request: Request) {
     await setOAuthInviteCookie(inviteCode);
   }
 
+  log.info("starting oauth sign-in", {
+    provider,
+    has_invite: Boolean(inviteCode),
+    redirect_path: redirectTo,
+  });
+
   try {
     // signIn() throws the provider redirect; let it propagate.
     await signIn(provider, { redirectTo });
   } catch (error) {
     if (error instanceof AuthError) {
+      log.error("failed to start oauth sign-in", { provider }, error);
       return NextResponse.json(
         { error: "Could not start sign-in with that provider." },
         { status: 500 },

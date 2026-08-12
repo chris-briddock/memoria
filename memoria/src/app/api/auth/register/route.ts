@@ -11,6 +11,9 @@ import {
   claimInvite,
 } from "@/lib/oauth";
 import { field } from "@/lib/form";
+import { logger } from "@/lib/logger";
+
+const log = logger("api.register");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,6 +62,7 @@ export async function POST(request: Request) {
 
   const existing = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (existing) {
+    log.info("registration rejected: email already registered");
     return NextResponse.json({ error: "An account with that email already exists." }, { status: 400 });
   }
 
@@ -66,11 +70,13 @@ export async function POST(request: Request) {
 
   if (!isBootstrap) {
     if (!inviteCode) {
+      log.info("registration rejected: invite code missing");
       return NextResponse.json({ error: "An invite code is required." }, { status: 400 });
     }
 
     const invite = await findRedeemableInvite(inviteCode);
     if (!invite) {
+      log.info("registration rejected: invite not redeemable");
       return NextResponse.json({ error: "That invite code is not valid or has been used." }, { status: 400 });
     }
     claimedInviteId = invite.id;
@@ -92,6 +98,10 @@ export async function POST(request: Request) {
     // cannot both succeed.
     const won = await claimInvite(claimedInviteId, user.id);
     if (!won) {
+      log.warn("invite claim lost to a race; rolling back registration", {
+        user_id: user.id,
+        invite_id: claimedInviteId,
+      });
       await db.delete(users).where(eq(users.id, user.id));
       return NextResponse.json(
         { error: "That invite code was just used by someone else." },
@@ -100,12 +110,22 @@ export async function POST(request: Request) {
     }
   }
 
+  log.info("user registered", {
+    user_id: user.id,
+    role,
+    is_bootstrap: isBootstrap,
+    used_invite: Boolean(claimedInviteId),
+  });
+
   try {
     await signIn("credentials", { email, password, redirectTo: "/" });
     // Unreachable: signIn throws on success.
     return NextResponse.json({ ok: true, redirect: "/" });
   } catch (error) {
     if (error instanceof AuthError) {
+      // The account now exists but the user is signed out — worth surfacing
+      // loudly since it strands a freshly registered user at the form.
+      log.error("sign-in failed immediately after successful registration", { user_id: user.id }, error);
       return NextResponse.json({ error: "Sign-in failed after registration." }, { status: 400 });
     }
     if (error instanceof Error && error.message.startsWith("NEXT_REDIRECT")) {

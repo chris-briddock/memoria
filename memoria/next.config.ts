@@ -24,7 +24,18 @@ const nextConfig: NextConfig = {
   // console.warn-s "Couldn't load fs/zlib" when those Node built-ins can't
   // resolve inside the bundler's static-generation workers; externalizing it
   // makes Node load the package natively where the built-ins exist.
-  serverExternalPackages: ["sharp", "pg", "@aws-sdk/client-s3", "exifr"],
+  serverExternalPackages: [
+    "sharp",
+    "pg",
+    "@aws-sdk/client-s3",
+    "exifr",
+    // OTel exporters probe for optional transports (grpc, http2, protobuf)
+    // at import time; loading them natively keeps Turbopack out of their
+    // conditional require chains.
+    "@opentelemetry/sdk-node",
+    "@opentelemetry/exporter-trace-otlp-http",
+    "@opentelemetry/exporter-logs-otlp-http",
+  ],
   env: {
     APP_VERSION: packageJson.version,
     APP_COMMIT: commitHash(),

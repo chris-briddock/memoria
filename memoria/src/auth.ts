@@ -14,6 +14,9 @@ import {
   findRedeemableInvite,
   readOAuthInviteCookie,
 } from "@/lib/oauth";
+import { logger } from "@/lib/logger";
+
+const log = logger("auth");
 
 const credentialsSchema = z.object({
   email: z.email(),
@@ -73,8 +76,16 @@ async function createUserWithInviteGate(
     let inviteId: string | null = null;
     if (!isBootstrap) {
       const code = await readOAuthInviteCookie();
-      const invite = code ? await findRedeemableInvite(code) : null;
+      if (!code) {
+        log.warn("oauth account creation rejected: no invite cookie present");
+        await clearOAuthInviteCookie();
+        throw new OAuthInviteRequired(
+          "A valid invite code is required to join.",
+        );
+      }
+      const invite = await findRedeemableInvite(code);
       if (!invite) {
+        log.warn("oauth account creation rejected: invite not redeemable");
         await clearOAuthInviteCookie();
         throw new OAuthInviteRequired(
           "A valid invite code is required to join.",
@@ -108,12 +119,23 @@ async function createUserWithInviteGate(
       if (!won) {
         // Lost a race for the code: roll back the just-created user so the
         // invite cannot be double-spent.
+        log.warn("oauth invite claim lost to a race; rolling back user", {
+          user_id: user.id,
+          invite_id: inviteId,
+        });
         await db.delete(users).where(eq(users.id, user.id));
         throw new OAuthInviteRequired(
           "That invite code was just used by someone else.",
         );
       }
     }
+
+    log.info("oauth user created", {
+      user_id: user.id,
+      role,
+      is_bootstrap: isBootstrap,
+      used_invite: Boolean(inviteId),
+    });
 
     return {
       id: user.id,
@@ -153,17 +175,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(raw) {
         const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
+        if (!parsed.success) {
+          log.warn("credentials sign-in rejected: malformed payload");
+          return null;
+        }
 
         const { email, password } = parsed.data;
+        const normalizedEmail = email.toLowerCase();
         const user = await db.query.users.findFirst({
-          where: eq(users.email, email.toLowerCase()),
+          where: eq(users.email, normalizedEmail),
         });
-        if (!user?.passwordHash) return null;
+        if (!user?.passwordHash) {
+          // Never log passwords; whether the email exists is deliberately not
+          // distinguished in the message so the log can't be a user-enumeration
+          // oracle beyond what the timing already leaks.
+          log.warn("credentials sign-in failed: unknown email or no password set");
+          return null;
+        }
 
         const ok = await bcrypt.compare(password, user.passwordHash);
-        if (!ok) return null;
+        if (!ok) {
+          log.warn("credentials sign-in failed: wrong password", {
+            user_id: user.id,
+          });
+          return null;
+        }
 
+        log.info("credentials sign-in succeeded", {
+          user_id: user.id,
+          role: user.role,
+        });
         return {
           id: user.id,
           name: user.name,
@@ -179,6 +220,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id as string;
         token.role = (user as { role?: "admin" | "member" }).role ?? "member";
+        log.debug("jwt issued", {
+          user_id: token.id as string,
+          role: token.role as string,
+        });
       } else if (token.id) {
         // OAuth sign-ins do not pass through `authorize`, so refresh the role
         // from the database to keep the JWT accurate for every provider.

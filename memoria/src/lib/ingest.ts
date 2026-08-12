@@ -4,7 +4,10 @@ import type sharpType from "sharp";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { photos } from "@/db/schema";
+import { logger } from "@/lib/logger";
 import { objectKey, putObject } from "./storage";
+
+const log = logger("ingest");
 
 export const ACCEPTED_MIME_TYPES = [
   "image/jpeg",
@@ -77,9 +80,20 @@ export async function ingestPhoto(
   const filename = file.name || "untitled";
 
   if (!ACCEPTED_MIME_TYPES.includes(file.type)) {
+    log.info("ingest rejected: unsupported type", {
+      filename,
+      content_type: file.type,
+      size_bytes: file.size,
+      user_id: userId,
+    });
     return { status: "failed", filename, reason: `Unsupported file type ${file.type}` };
   }
   if (file.size > MAX_UPLOAD_BYTES) {
+    log.info("ingest rejected: over size limit", {
+      filename,
+      size_bytes: file.size,
+      user_id: userId,
+    });
     return { status: "failed", filename, reason: "File is larger than 50 MB" };
   }
 
@@ -90,6 +104,12 @@ export async function ingestPhoto(
     where: eq(photos.checksum, checksum),
   });
   if (existing) {
+    log.info("ingest skipped: duplicate content", {
+      filename,
+      checksum,
+      existing_photo_id: existing.id,
+      user_id: userId,
+    });
     return { status: "duplicate", photoId: existing.id, filename };
   }
 
@@ -120,6 +140,9 @@ export async function ingestPhoto(
       .webp({ quality: 80 })
       .toBuffer();
   } catch (err) {
+    // sharp failing on a file that passed the MIME gate usually means a
+    // truncated or corrupt upload — the error message carries sharp's reason.
+    log.warn("ingest failed: sharp could not process image", { filename, user_id: userId }, err);
     return {
       status: "failed",
       filename,
@@ -153,5 +176,15 @@ export async function ingestPhoto(
     })
     .returning({ id: photos.id });
 
+  log.info("photo ingested", {
+    photo_id: row.id,
+    filename,
+    checksum,
+    size_bytes: buffer.byteLength,
+    width: width ?? undefined,
+    height: height ?? undefined,
+    has_exif_date: takenAt !== null,
+    user_id: userId,
+  });
   return { status: "created", photoId: row.id, filename };
 }
