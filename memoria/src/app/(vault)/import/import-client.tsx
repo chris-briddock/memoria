@@ -25,6 +25,11 @@ type Failure = { filename: string; reason: string };
 
 type PickedItem = { id: string; name: string; mimeType: string; baseUrl: string };
 
+function importButtonLabel(busy: boolean, count: number): string {
+  if (busy) return "Importing…";
+  return count > 0 ? `Import ${count} selected` : "Import selected";
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB"];
@@ -260,6 +265,9 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
         className="flex flex-wrap gap-2"
         role="tablist"
         aria-label="Import source"
+        // tabIndex -1 keeps the tablist programmatically focusable without
+        // entering the tab order; the tabs manage keyboard focus themselves.
+        tabIndex={-1}
         onKeyDown={(e) => {
           if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
           e.preventDefault();
@@ -377,7 +385,7 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
                   onClick={importSelected}
                   disabled={selected.size === 0 || busy}
                 >
-                  {busy ? "Importing…" : `Import ${selected.size > 0 ? selected.size + " " : ""}selected`}
+                  {importButtonLabel(busy, selected.size)}
                 </button>
                 {selected.size > 0 && (
                   <button type="button" className="btn-ghost text-sm" onClick={() => setSelected(new Set())} disabled={busy}>
