@@ -89,12 +89,17 @@ export type ImportSurface = {
   kind: "drive" | "picker";
 };
 
-export const IMPORT_SURFACES: ImportSurface[] = [
-  { id: "gdrive", label: "Google Drive", provider: CLOUD_PROVIDERS[0], kind: "drive" },
-  { id: "onedrive", label: "Microsoft OneDrive", provider: CLOUD_PROVIDERS[1], kind: "drive" },
-  // Google Photos shares the gdrive OAuth account but needs the separate Picker UI.
-  { id: "google-photos", label: "Google Photos", provider: CLOUD_PROVIDERS[0], kind: "picker" },
-];
+export const IMPORT_SURFACES: ImportSurface[] = (() => {
+  // Resolve providers by id — array positions must never matter here.
+  const gdrive = CLOUD_PROVIDERS.find((p) => p.id === "gdrive")!;
+  const onedrive = CLOUD_PROVIDERS.find((p) => p.id === "onedrive")!;
+  return [
+    { id: "gdrive", label: "Google Drive", provider: gdrive, kind: "drive" },
+    { id: "onedrive", label: "Microsoft OneDrive", provider: onedrive, kind: "drive" },
+    // Google Photos shares the gdrive OAuth account but needs the separate Picker UI.
+    { id: "google-photos", label: "Google Photos", provider: gdrive, kind: "picker" },
+  ];
+})();
 
 export function importSurface(id: string): ImportSurface | undefined {
   return IMPORT_SURFACES.find((s) => s.id === id);

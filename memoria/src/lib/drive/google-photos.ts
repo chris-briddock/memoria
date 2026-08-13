@@ -10,6 +10,9 @@ import type { CloudProviderDef } from "@/lib/import-providers";
  */
 
 const PICKER_BASE = "https://photospicker.googleapis.com/v1";
+// Safety net for a misbehaving pager: 50 pages * 100 items far exceeds any
+// real import selection but stops an unbounded loop on repeated tokens.
+const MAX_PAGES = 50;
 
 type FetchFn = typeof fetch;
 
@@ -65,6 +68,7 @@ export async function pollPickerSession(
   if (!session.mediaItemsSet) return null;
 
   const items: PickedItem[] = [];
+  const seenTokens = new Set<string>();
   let pageToken: string | undefined;
   do {
     const url = new URL(`${PICKER_BASE}/mediaItems`);
@@ -91,17 +95,28 @@ export async function pollPickerSession(
       });
     }
     pageToken = data.nextPageToken;
+    // Guard against a loop caused by a server echoing the same token.
+    if (pageToken && (seenTokens.has(pageToken) || seenTokens.size >= MAX_PAGES)) {
+      break;
+    }
+    if (pageToken) seenTokens.add(pageToken);
   } while (pageToken);
 
   return items;
 }
 
 export async function downloadPickedItem(
+  provider: CloudProviderDef,
+  userId: string,
   item: PickedItem,
   fetchFn: FetchFn = fetch,
 ): Promise<Buffer> {
-  // Picker baseUrls require =d for the full-resolution download.
-  const res = await fetchFn(`${item.baseUrl}=d`);
+  // Picker baseUrls require =d for the full-resolution download, and an
+  // Authorization header since March 2025 — unauthenticated fetches 403.
+  const accessToken = await getValidAccessToken(provider, userId);
+  const res = await fetchFn(`${item.baseUrl}=d`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   if (!res.ok) throw new Error(`Could not download picked item (${res.status})`);
   return Buffer.from(await res.arrayBuffer());
 }

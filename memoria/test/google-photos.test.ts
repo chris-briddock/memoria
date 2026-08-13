@@ -117,6 +117,23 @@ describe("pollPickerSession", () => {
     expect(items?.[0].name).toBe("m1");
   });
 
+  it("stops paginating when the server echoes the same page token", async () => {
+    // Guard against an infinite loop: a server that keeps returning the same
+    // nextPageToken must not be followed forever. Use an implementation (not
+    // mockResolvedValue) so each page response is a fresh, unconsumed body.
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).includes("/sessions/")) return jsonResponse({ mediaItemsSet: true });
+      return jsonResponse({
+        mediaItems: [
+          { id: "m1", mimeType: "image/jpeg", mediaFile: { baseUrl: "https://b/1", filename: "a.jpg" } },
+        ],
+        nextPageToken: "loop",
+      });
+    });
+    const items = await pollPickerSession(gdrive, "user-1", "session-1");
+    expect(items).toHaveLength(2); // first page + one echoed page, then the guard fires
+  });
+
   it("throws when the session lookup fails", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(new Response("nope", { status: 404 }));
     await expect(pollPickerSession(gdrive, "user-1", "session-1")).rejects.toThrow(/404/);
@@ -124,25 +141,34 @@ describe("pollPickerSession", () => {
 });
 
 describe("downloadPickedItem", () => {
-  it("appends =d for the full-resolution download", async () => {
+  it("appends =d and authorizes with the user's token", async () => {
     const bytes = Buffer.from("jpeg-bytes");
     vi.mocked(fetch).mockResolvedValueOnce(new Response(bytes, { status: 200 }));
 
-    const result = await downloadPickedItem({
+    const result = await downloadPickedItem(gdrive, "user-1", {
       id: "m1",
       name: "one.jpg",
       mimeType: "image/jpeg",
       baseUrl: "https://base/1",
     });
 
-    expect(vi.mocked(fetch).mock.calls[0][0]).toBe("https://base/1=d");
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("https://base/1=d");
+    expect((init?.headers as Record<string, string>).Authorization).toBe(
+      "Bearer picker-token",
+    );
     expect(result.equals(bytes)).toBe(true);
   });
 
   it("throws on failed downloads", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(new Response("gone", { status: 410 }));
     await expect(
-      downloadPickedItem({ id: "m1", name: "n", mimeType: "image/jpeg", baseUrl: "https://b" }),
+      downloadPickedItem(gdrive, "user-1", {
+        id: "m1",
+        name: "n",
+        mimeType: "image/jpeg",
+        baseUrl: "https://b",
+      }),
     ).rejects.toThrow(/410/);
   });
 });

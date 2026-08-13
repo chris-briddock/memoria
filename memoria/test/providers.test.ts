@@ -14,6 +14,8 @@ describe("cloud provider configuration", () => {
     delete process.env.IMPORT_GOOGLE_CLIENT_SECRET;
     delete process.env.IMPORT_MICROSOFT_CLIENT_ID;
     delete process.env.IMPORT_MICROSOFT_CLIENT_SECRET;
+    delete process.env.AUTH_GOOGLE_ID;
+    delete process.env.AUTH_GOOGLE_SECRET;
   });
 
   it("reports unconfigured providers as disabled without leaking credentials", () => {
@@ -42,8 +44,6 @@ describe("cloud provider configuration", () => {
     process.env.AUTH_GOOGLE_ID = "signin-id";
     process.env.AUTH_GOOGLE_SECRET = "signin-secret";
     expect(isCloudProviderEnabled(cloudProvider("gdrive")!)).toBe(false);
-    delete process.env.AUTH_GOOGLE_ID;
-    delete process.env.AUTH_GOOGLE_SECRET;
   });
 
   it("google-photos surface shares the gdrive account", () => {

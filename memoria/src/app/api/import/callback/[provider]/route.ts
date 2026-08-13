@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { verifySession } from "@/lib/dal";
 import { cloudProvider } from "@/lib/import-providers";
 import {
@@ -13,6 +12,9 @@ const log = logger("api.import.callback");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** Generic message shown in the UI; specifics stay in server logs. */
+const GENERIC_ERROR = "Connection failed. Please try again.";
 
 function settingsUrl(request: Request, params: Record<string, string>): string {
   const url = new URL("/settings", new URL(request.url).origin);
@@ -38,8 +40,9 @@ export async function GET(
   const state = url.searchParams.get("state");
 
   try {
-    // Must be the same browser session that started the flow.
-    const session = await auth();
+    // Single session source; must be the same browser session that started
+    // the flow (verifySession redirects anonymous visitors to /signin).
+    const user = await verifySession();
     const cookiePayload = await readImportConnectCookie(def);
     await clearImportConnectCookie(def);
 
@@ -49,42 +52,36 @@ export async function GET(
         settingsUrl(request, { import_error: `${def.label} connection was denied` }),
       );
     }
-    if (!session?.user?.id || !cookiePayload) {
+    if (!cookiePayload) {
       return NextResponse.redirect(
         settingsUrl(request, { import_error: "Connection flow expired — try again" }),
       );
     }
-    const [cookieUserId] = cookiePayload.split(":");
-    if (cookieUserId !== session.user.id || state !== session.user.id) {
+    const [cookieUserId, cookieState] = cookiePayload.split(":");
+    if (cookieUserId !== user.id || !state || state !== cookieState) {
       log.warn("cloud import callback session mismatch", { provider: def.id });
       return NextResponse.redirect(
         settingsUrl(request, { import_error: "Connection flow mismatch — try again" }),
       );
     }
     if (!code) {
-      return NextResponse.redirect(
-        settingsUrl(request, { import_error: "No authorization code returned" }),
-      );
+      log.warn("cloud import callback missing code", { provider: def.id, user_id: user.id });
+      return NextResponse.redirect(settingsUrl(request, { import_error: GENERIC_ERROR }));
     }
 
-    const user = await verifySession();
     const redirectUri = `${new URL(request.url).origin}/api/import/callback/${def.id}`;
     const result = await exchangeCodeAndSave(def, code, user.id, redirectUri);
     if (!result.connected) {
+      // The detailed reason is logged server-side; never echoed back to the
+      // browser where it could leak provider responses or internals.
       log.warn("cloud import connect failed", { provider: def.id, reason: result.reason });
-      return NextResponse.redirect(
-        settingsUrl(request, { import_error: result.reason }),
-      );
+      return NextResponse.redirect(settingsUrl(request, { import_error: GENERIC_ERROR }));
     }
 
     log.info("cloud import connected", { provider: def.id, user_id: user.id });
     return NextResponse.redirect(settingsUrl(request, { import_connected: def.id }));
   } catch (err) {
     log.error("cloud import callback error", { provider: def.id }, err);
-    return NextResponse.redirect(
-      settingsUrl(request, {
-        import_error: err instanceof Error ? err.message : "Connection failed",
-      }),
-    );
+    return NextResponse.redirect(settingsUrl(request, { import_error: GENERIC_ERROR }));
   }
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiSubmit } from "@/lib/api-submit";
 
@@ -79,9 +78,9 @@ export function CloudConnections({
               {c.connected ? (
                 <DisconnectButton id={c.id} label={c.label} />
               ) : (
-                <Link href={`/api/import/connect/${c.id}`} className="btn-ghost text-sm">
+                <a href={`/api/import/connect/${c.id}`} className="btn-ghost text-sm">
                   Connect
-                </Link>
+                </a>
               )}
             </span>
           </li>

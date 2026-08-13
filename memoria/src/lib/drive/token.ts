@@ -43,6 +43,15 @@ function decode(raw: string | undefined): string | null {
   const a = Buffer.from(sig);
   const b = Buffer.from(expected);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  // Signature is valid — but the cookie maxAge is client-side hint only.
+  // Reject flows older than the 10-minute window server-side as well.
+  // Payload is `${userId}:${issuedAtMs}` or `${userId}:${state}:${issuedAtMs}`;
+  // the timestamp is always the trailing segment.
+  const parts = payload.split(":");
+  if (parts.length < 2) return null;
+  const issuedAtMs = Number(parts.at(-1));
+  if (!Number.isFinite(issuedAtMs)) return null;
+  if (Date.now() - issuedAtMs > MAX_AGE_SECONDS * 1000) return null;
   return payload;
 }
 
@@ -64,7 +73,7 @@ export async function setImportConnectCookie(
   });
 }
 
-/** Returns the payload `${userId}:${issuedAtMs}` when valid, else null. */
+/** Returns the payload (`${userId}:${issuedAtMs}` or `${userId}:${state}:${issuedAtMs}`) when valid, else null. */
 export async function readImportConnectCookie(
   provider: CloudProviderDef,
 ): Promise<string | null> {
@@ -108,7 +117,7 @@ async function readAccount(
 async function refreshToken(
   provider: CloudProviderDef,
   refreshTokenValue: string,
-): Promise<{ accessToken: string; expiresAt: number }> {
+): Promise<{ accessToken: string; refreshToken: string | null; expiresAt: number }> {
   const creds = cloudProviderCredentials(provider);
   if (!creds) {
     throw new Error(`${provider.label} import is not configured on this server`);
@@ -143,13 +152,19 @@ async function refreshToken(
     );
   }
 
-  const json = (await res.json()) as { access_token?: string; expires_in?: number };
+  const json = (await res.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    // Microsoft rotates refresh tokens; Google usually omits a new one.
+    refresh_token?: string;
+  };
   if (!json.access_token) {
     throw new Error(`${provider.label} refresh response missing access_token`);
   }
 
   return {
     accessToken: json.access_token,
+    refreshToken: json.refresh_token ?? null,
     expiresAt: Math.floor(Date.now() / 1000) + (json.expires_in ?? 3600),
   };
 }
@@ -184,7 +199,13 @@ export async function getValidAccessToken(
   const refreshed = await refreshToken(provider, account.refreshToken);
   await db
     .update(accounts)
-    .set({ access_token: refreshed.accessToken, expires_at: refreshed.expiresAt })
+    .set({
+      access_token: refreshed.accessToken,
+      // Persist a rotated refresh token when the provider issues one
+      // (OneDrive does); otherwise keep the existing token untouched.
+      ...(refreshed.refreshToken ? { refresh_token: refreshed.refreshToken } : {}),
+      expires_at: refreshed.expiresAt,
+    })
     .where(
       and(
         eq(accounts.userId, userId),
@@ -217,6 +238,7 @@ export async function exchangeCodeAndSave(
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params,
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -287,7 +309,10 @@ async function fetchExternalAccountId(
     provider.id === "gdrive"
       ? "https://www.googleapis.com/drive/v3/about?fields=user"
       : "https://graph.microsoft.com/v1.0/me?$select=id";
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(10_000),
+  });
   if (!res.ok) {
     throw new Error(`Could not resolve ${provider.label} account id (${res.status})`);
   }

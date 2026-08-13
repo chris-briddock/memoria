@@ -3,8 +3,11 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts } from "@/db/schema";
 import { verifySession } from "@/lib/dal";
-import { CLOUD_PROVIDERS, IMPORT_SURFACES } from "@/lib/import-providers";
-import { isCloudProviderEnabled } from "@/lib/import-providers";
+import {
+  CLOUD_PROVIDERS,
+  IMPORT_SURFACES,
+  isCloudProviderEnabled,
+} from "@/lib/import-providers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,10 +21,7 @@ export async function GET() {
   const user = await verifySession();
 
   const rows = await db.query.accounts.findMany({
-    where: and(
-      eq(accounts.userId, user.id),
-      // drizzle's inArray needs a tuple for TS but takes a runtime array.
-    ),
+    where: eq(accounts.userId, user.id),
   });
   const connectedIds = new Set(
     rows

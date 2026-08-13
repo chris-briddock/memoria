@@ -1,18 +1,18 @@
+import { randomUUID } from "node:crypto";
 import { verifySession } from "@/lib/dal";
 import { cloudProvider, isCloudProviderEnabled } from "@/lib/import-providers";
 import { setImportConnectCookie } from "@/lib/drive/token";
 import { logger } from "@/lib/logger";
-import { auth } from "@/auth";
-
-const log = logger("api.import.connect");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const log = logger("api.import.connect");
+
 /**
  * Start a cloud-storage connection: sets a signed cookie binding this flow to
- * the signed-in user, then 302s to the provider's consent screen. Navigation-
- * based (a normal link), never fetch().
+ * the signed-in user (plus a random nonce), then 302s to the provider's
+ * consent screen. Navigation-based (a normal link), never fetch().
  */
 export async function GET(
   request: Request,
@@ -30,12 +30,11 @@ export async function GET(
   }
 
   const user = await verifySession();
-  const session = await auth();
-  if (!session?.user?.id) {
-    return new Response("Sign in first.", { status: 401 });
-  }
 
-  await setImportConnectCookie(def, user.id);
+  // OAuth `state` is an unguessable nonce round-tripped through the signed
+  // cookie — never the (predictable) user id.
+  const state = randomUUID();
+  await setImportConnectCookie(def, `${user.id}:${state}`);
 
   const url = new URL(def.authorizeUrl);
   const origin = new URL(request.url).origin;
@@ -46,8 +45,7 @@ export async function GET(
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", def.scope);
-  // OAuth `state` is defense-in-depth on top of the signed cookie.
-  url.searchParams.set("state", user.id);
+  url.searchParams.set("state", state);
   for (const [k, v] of Object.entries(def.authorizeExtraParams ?? {})) {
     url.searchParams.set(k, v);
   }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/dal";
-import { cloudProvider } from "@/lib/import-providers";
+import { cloudProvider, isCloudProviderEnabled } from "@/lib/import-providers";
 import {
   createPickerSession,
   pollPickerSession,
@@ -14,20 +14,21 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const gdrive = () => {
-  const def = cloudProvider("gdrive");
-  if (!def) throw new Error("gdrive provider missing");
-  return def;
-};
-
 /**
  * POST: create a Picker session -> { pickerUri, sessionId }. The client then
  * navigates the user to pickerUri in a new tab.
  */
 export async function POST() {
   const user = await verifySession();
+  const def = cloudProvider("gdrive");
+  if (!def || !isCloudProviderEnabled(def)) {
+    return NextResponse.json(
+      { error: "Google import is not configured on this server" },
+      { status: 400 },
+    );
+  }
   try {
-    const session = await createPickerSession(gdrive(), user.id);
+    const session = await createPickerSession(def, user.id);
     return NextResponse.json(session);
   } catch (err) {
     log.warn("picker session create failed", { user_id: user.id }, err);
@@ -44,12 +45,19 @@ export async function POST() {
  */
 export async function GET(request: Request) {
   const user = await verifySession();
+  const def = cloudProvider("gdrive");
+  if (!def || !isCloudProviderEnabled(def)) {
+    return NextResponse.json(
+      { error: "Google import is not configured on this server" },
+      { status: 400 },
+    );
+  }
   const sessionId = new URL(request.url).searchParams.get("sessionId");
   if (!sessionId) {
     return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
   }
   try {
-    const items: PickedItem[] | null = await pollPickerSession(gdrive(), user.id, sessionId);
+    const items: PickedItem[] | null = await pollPickerSession(def, user.id, sessionId);
     if (items === null) return NextResponse.json({ done: false });
     return NextResponse.json({ done: true, items });
   } catch (err) {

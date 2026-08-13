@@ -56,6 +56,22 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
   // Picker state
   const [pickerWaiting, setPickerWaiting] = useState(false);
   const pollCount = useRef(0);
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function stopPolling() {
+    if (pollTimer.current) {
+      clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+  }
+
+  // Never leave a polling interval (or a pending import) running after unmount.
+  useEffect(
+    () => () => {
+      if (pollTimer.current) clearInterval(pollTimer.current);
+    },
+    [],
+  );
 
   async function loadFiles(surfaceId: string) {
     setFiles(null);
@@ -63,13 +79,18 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
     setSelected(new Set());
     setSummary(null);
     setFailures([]);
-    const res = await fetch(`/api/import/${surfaceId}/files`);
-    const body = await res.json().catch(() => null);
-    if (!res.ok) {
-      setFilesError((body?.error as string) ?? "Could not list files.");
-      return;
+    try {
+      const res = await fetch(`/api/import/${surfaceId}/files`);
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setFilesError((body?.error as string) ?? "Could not list files.");
+        return;
+      }
+      setFiles((body?.files as DriveFile[]) ?? []);
+    } catch {
+      // Network-level failure — the promise must never reject unhandled here.
+      setFilesError("Could not list files.");
     }
-    setFiles((body?.files as DriveFile[]) ?? []);
   }
 
   // Kick off the first load once mounted. Deferring to a microtask keeps the
@@ -78,7 +99,7 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
   useEffect(() => {
     if (initialLoad.current) return;
     initialLoad.current = true;
-    if (active && active.kind === "drive") {
+    if (active?.kind === "drive") {
       const t = setTimeout(() => void loadFiles(active.id), 0);
       return () => clearTimeout(t);
     }
@@ -134,29 +155,40 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
     setPickerWaiting(true);
     setSummary(null);
     setFailures([]);
+    // Open the tab synchronously within the user gesture; the picker URL only
+    // exists after the POST returns, and popups opened after an await are
+    // blocked by most browsers. On failure we close the blank tab again.
+    const pickerTab = window.open("about:blank", "_blank", "noopener");
     try {
       const res = await fetch("/api/google-photos/files", { method: "POST" });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error((body?.error as string) ?? "Could not start picker");
       const { pickerUri, sessionId } = body as { pickerUri: string; sessionId: string };
-      window.open(pickerUri, "_blank", "noopener");
+      if (pickerTab) pickerTab.location.href = pickerUri;
+      else window.open(pickerUri, "_blank", "noopener");
 
       pollCount.current = 0;
-      const timer = setInterval(async () => {
+      stopPolling();
+      pollTimer.current = setInterval(async () => {
         pollCount.current++;
         if (pollCount.current > POLL_LIMIT) {
-          clearInterval(timer);
+          stopPolling();
           setPickerWaiting(false);
           setFailures([{ filename: "Picker", reason: "Timed out waiting for your selection." }]);
           return;
         }
-        const poll = await fetch(
-          `/api/google-photos/files?sessionId=${encodeURIComponent(sessionId)}`,
-        );
+        let poll: Response;
+        try {
+          poll = await fetch(
+            `/api/google-photos/files?sessionId=${encodeURIComponent(sessionId)}`,
+          );
+        } catch {
+          return; // transient network error; try again next tick
+        }
         if (!poll.ok) return; // transient; try again next tick
         const pollBody = await poll.json().catch(() => null);
         if (!pollBody?.done) return;
-        clearInterval(timer);
+        stopPolling();
         setPickerWaiting(false);
         const items = (pollBody.items as PickedItem[]) ?? [];
         if (items.length === 0) {
@@ -165,10 +197,12 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
         }
         setBusy(true);
         try {
+          // Items are re-resolved server-side from the session; the client
+          // only says "import what I picked", never supplies URLs.
           const importRes = await fetch("/api/google-photos", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ items }),
+            body: JSON.stringify({ sessionId }),
           });
           const importBody = await importRes.json().catch(() => null);
           if (!importRes.ok) {
@@ -197,6 +231,7 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
         }
       }, POLL_INTERVAL_MS);
     } catch (err) {
+      pickerTab?.close();
       setPickerWaiting(false);
       setFailures([
         { filename: "Picker", reason: err instanceof Error ? err.message : "Something went wrong" },
@@ -221,12 +256,30 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Import source">
+      <div
+        className="flex flex-wrap gap-2"
+        role="tablist"
+        aria-label="Import source"
+        onKeyDown={(e) => {
+          if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+          e.preventDefault();
+          const idx = connected.findIndex((s) => s.id === activeId);
+          if (idx === -1) return;
+          const delta = e.key === "ArrowRight" ? 1 : -1;
+          const next = connected[(idx + delta + connected.length) % connected.length];
+          selectTab(next.id);
+          document.getElementById(`import-tab-${next.id}`)?.focus();
+        }}
+      >
         {connected.map((s) => (
           <button
             key={s.id}
+            type="button"
+            id={`import-tab-${s.id}`}
             role="tab"
             aria-selected={activeId === s.id}
+            aria-controls="import-panel"
+            tabIndex={activeId === s.id ? 0 : -1}
             onClick={() => selectTab(s.id)}
             className={activeId === s.id ? "btn-primary" : "btn-ghost"}
           >
@@ -236,7 +289,7 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
       </div>
 
       {active?.kind === "picker" && (
-        <div className="card space-y-3 px-5 py-6">
+        <div role="tabpanel" id="import-panel" aria-labelledby={`import-tab-${active.id}`} className="card space-y-3 px-5 py-6">
           <p className="text-sm text-ink-soft">
             Pick photos in Google&rsquo;s picker UI &mdash; it opens in a new tab. Once
             you confirm your selection, Memoria imports everything you picked.
@@ -262,7 +315,7 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
       )}
 
       {active?.kind === "drive" && (
-        <div className="space-y-4">
+        <div role="tabpanel" id="import-panel" aria-labelledby={`import-tab-${active.id}`} className="space-y-4">
           {filesError && (
             <p role="alert" className="card px-5 py-4 text-sm text-accent">
               {filesError}

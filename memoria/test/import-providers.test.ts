@@ -159,6 +159,25 @@ describe("downloadDriveFile", () => {
     return import("@/lib/drive/providers");
   }
 
+  it("rejects obviously-oversized downloads before buffering", async () => {
+    const { downloadDriveFile: download } = await withToken();
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(null, {
+        status: 200,
+        headers: { "Content-Length": "999999999", "Content-Type": "image/jpeg" },
+      }),
+    );
+    await expect(
+      download(cloudProvider("gdrive")!, "user-1", "big-file"),
+    ).rejects.toThrow(/too large/i);
+  });
+
+  it("rejects an unknown provider id on list", async () => {
+    const { listDriveFiles: list } = await withToken();
+    const bogus = { id: "bogus" } as never;
+    await expect(list(bogus, "user-1")).rejects.toThrow(/Unknown import provider/);
+  });
+
   it("downloads the bytes and resolves the real filename from metadata", async () => {
     const { downloadDriveFile: download } = await withToken();
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);

@@ -47,7 +47,10 @@ export default async function SettingsPage({
 
       {importConnected && (
         <p role="status" className="card px-5 py-3.5 text-sm text-ink">
-          Cloud storage connected ({importConnected}). You can now{" "}
+          Cloud storage connected ({
+            importStatus.providers.find((p) => p.id === importConnected)?.label ??
+            importConnected
+          }). You can now{" "}
           <Link href="/import" className="text-accent underline underline-offset-2">
             import photos
           </Link>

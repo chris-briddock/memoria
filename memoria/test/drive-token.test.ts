@@ -110,6 +110,8 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.IMPORT_GOOGLE_CLIENT_ID;
   delete process.env.IMPORT_GOOGLE_CLIENT_SECRET;
+  delete process.env.IMPORT_MICROSOFT_CLIENT_ID;
+  delete process.env.IMPORT_MICROSOFT_CLIENT_SECRET;
   vi.unstubAllGlobals();
 });
 
@@ -130,6 +132,30 @@ describe("connect cookie", () => {
     await setImportConnectCookie(gdrive, "user-1");
     const name = "memoria_import_gdrive";
     cookiesState.jar.set(name, `${cookiesState.jar.get(name)}tampered`);
+    expect(await readImportConnectCookie(gdrive)).toBeNull();
+  });
+
+  it("round-trips the connect flow payload with a state nonce", async () => {
+    // The connect route stores `${userId}:${uuid-state}`; setImportConnectCookie
+    // appends the timestamp. decode must read the trailing segment as the
+    // timestamp, not mistake the uuid for it.
+    await setImportConnectCookie(gdrive, "user-1:nonce-123");
+    const payload = await readImportConnectCookie(gdrive);
+    expect(payload).not.toBeNull();
+    const [cookieUserId, cookieState] = payload!.split(":");
+    expect(cookieUserId).toBe("user-1");
+    expect(cookieState).toBe("nonce-123");
+  });
+
+  it("rejects a payload with a non-numeric timestamp", async () => {
+    // Payload without a numeric trailing timestamp must fail decode.
+    await setImportConnectCookie(gdrive, "user-1");
+    const name = "memoria_import_gdrive";
+    // Overwrite with a payload whose last segment is not a number, re-signed.
+    const { createHmac } = await import("node:crypto");
+    const bogus = "user-1:not-a-number";
+    const sig = createHmac("sha256", "test-secret").update(bogus).digest("base64url");
+    cookiesState.jar.set(name, `${bogus}.${sig}`);
     expect(await readImportConnectCookie(gdrive)).toBeNull();
   });
 
@@ -217,6 +243,28 @@ describe("getValidAccessToken", () => {
       jsonResponse({ access_token: "back", expires_in: 3600 }),
     );
     await expect(getValidAccessToken(gdrive, "user-1")).resolves.toBe("back");
+  });
+
+  it("persists a rotated refresh token when the provider returns one", async () => {
+    accountWith({ expires_at: Math.floor(Date.now() / 1000) - 1 });
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ access_token: "new-at", expires_in: 3600, refresh_token: "new-rt" }),
+    );
+
+    const token = await getValidAccessToken(gdrive, "user-1");
+    expect(token).toBe("new-at");
+    expect(dbState.updated[0].refresh_token).toBe("new-rt");
+  });
+
+  it("keeps the existing refresh token when the refresh response omits one", async () => {
+    accountWith({ expires_at: Math.floor(Date.now() / 1000) - 1 });
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ access_token: "new-at", expires_in: 3600 }),
+    );
+
+    const token = await getValidAccessToken(gdrive, "user-1");
+    expect(token).toBe("new-at");
+    expect(dbState.updated[0].refresh_token).toBeUndefined();
   });
 
   it("uses a 1-hour default when the refresh response omits expires_in", async () => {
@@ -350,8 +398,6 @@ describe("exchangeCodeAndSave", () => {
     expect(result.connected).toBe(true);
     expect(dbState.inserted[0].providerAccountId).toBe("ms-user-9");
     expect(vi.mocked(fetch).mock.calls[1][0]).toContain("graph.microsoft.com/v1.0/me");
-    delete process.env.IMPORT_MICROSOFT_CLIENT_ID;
-    delete process.env.IMPORT_MICROSOFT_CLIENT_SECRET;
   });
 
   it("refuses to save a connection without a refresh token", async () => {

@@ -88,15 +88,18 @@ async function onedriveList(accessToken: string, fetchFn: FetchFn): Promise<Driv
     }));
 }
 
+/** ingestPhoto caps uploads at 50 MB; refuse to buffer anything larger. */
+const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024;
+
 export async function listDriveFiles(
   provider: CloudProviderDef,
   userId: string,
   fetchFn: FetchFn = fetch,
 ): Promise<DriveFile[]> {
   const accessToken = await getValidAccessToken(provider, userId);
-  return provider.id === "gdrive"
-    ? googleList(accessToken, fetchFn)
-    : onedriveList(accessToken, fetchFn);
+  if (provider.id === "gdrive") return googleList(accessToken, fetchFn);
+  if (provider.id === "onedrive") return onedriveList(accessToken, fetchFn);
+  throw new Error(`Unknown import provider id: ${provider.id}`);
 }
 
 export async function downloadDriveFile(
@@ -106,14 +109,22 @@ export async function downloadDriveFile(
   fetchFn: FetchFn = fetch,
 ): Promise<{ body: Buffer; name: string; mimeType: string }> {
   const accessToken = await getValidAccessToken(provider, userId);
+  const id = encodeURIComponent(fileId);
 
   const url =
     provider.id === "gdrive"
-      ? `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
-      : `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`;
+      ? `https://www.googleapis.com/drive/v3/files/${id}?alt=media`
+      : `https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`;
 
   const res = await fetchFn(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) throw new Error(`Download failed (${res.status})`);
+
+  // Fail fast on obviously-oversized files instead of buffering them first;
+  // ingestPhoto would only reject after the full download landed in memory.
+  const contentLength = Number(res.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_DOWNLOAD_BYTES) {
+    throw new Error(`Download too large (${contentLength} bytes, limit 52428800)`);
+  }
 
   const arrayBuffer = await res.arrayBuffer();
   const body = Buffer.from(arrayBuffer);
@@ -124,8 +135,8 @@ export async function downloadDriveFile(
   try {
     const metaUrl =
       provider.id === "gdrive"
-        ? `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType`
-        : `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}?$select=name,file`;
+        ? `https://www.googleapis.com/drive/v3/files/${id}?fields=name,mimeType`
+        : `https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=name,file`;
     const metaRes = await fetchFn(metaUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
