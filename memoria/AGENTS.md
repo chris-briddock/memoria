@@ -46,3 +46,12 @@ Self-hosted family photo vault. Next.js 16 + Postgres (Drizzle) + RustFS
   `border-line`, `accent`) defined in `src/app/globals.css`. Use those rather
   than raw palette colours so light/dark both work.
 - After schema edits: `npm run db:generate` then `npm run db:migrate`.
+- Cloud imports (Google Drive / Google Photos / OneDrive) live under
+  `src/app/api/import`, `src/app/api/google-photos`, and `src/lib/drive/`.
+  They mint their own OAuth connections into the shared `accounts` table
+  (provider `gdrive` / `onedrive`), separate from sign-in identities, so a
+  storage connection never changes how the user signs in. `google-photos` is
+  a surface over the `gdrive` account using the Photos Picker API (the
+  Library API lost read access in 2025). `getValidAccessToken()` in
+  `src/lib/drive/token.ts` refreshes and persists tokens transparently —
+  never read `accounts.access_token` directly.

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState, useTransition } from "react";
 
@@ -122,6 +123,14 @@ export function Uploader() {
           }}
         />
       </div>
+
+      <p className="text-xs text-ink-faint">
+        Already stored in the cloud?{" "}
+        <Link href="/import" className="text-accent underline underline-offset-2">
+          Import from Google Drive or OneDrive instead
+        </Link>
+        .
+      </p>
 
       {summary && (
         <p className="text-sm text-ink-soft" role="status">
