@@ -5,6 +5,7 @@ import type { SessionUser } from "@/lib/types";
 import { enabledOAuthProviders } from "@/lib/oauth-providers";
 import { SignInMethods } from "./sign-in-methods";
 import { ProfileSection } from "./profile-section";
+import { CloudConnections, type CloudConnectionStatus } from "./cloud-connections";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -13,12 +14,25 @@ type SignInMethodsData = {
   providers: string[];
 };
 
-export default async function SettingsPage() {
-  const [user, signInMethods] = await Promise.all([
+type ImportStatus = {
+  providers: CloudConnectionStatus[];
+  surfaces: unknown[];
+};
+
+export default async function SettingsPage({
+  searchParams,
+}: Readonly<{
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}>) {
+  const [user, signInMethods, importStatus, params] = await Promise.all([
     apiGetRequired<SessionUser>("/api/me"),
     apiGetRequired<SignInMethodsData>("/api/me/sign-in-methods"),
+    apiGetRequired<ImportStatus>("/api/import"),
+    searchParams,
   ]);
   const isAdmin = user.role === "admin";
+  const importConnected = typeof params.import_connected === "string" ? params.import_connected : null;
+  const importError = typeof params.import_error === "string" ? params.import_error : null;
 
   return (
     <div className="space-y-12">
@@ -30,6 +44,24 @@ export default async function SettingsPage() {
           Your profile and how you sign in to the vault.
         </p>
       </header>
+
+      {importConnected && (
+        <output className="card block px-5 py-3.5 text-sm text-ink">
+          Cloud storage connected ({
+            importStatus.providers.find((p) => p.id === importConnected)?.label ??
+            importConnected
+          }). You can now{" "}
+          <Link href="/import" className="text-accent underline underline-offset-2">
+            import photos
+          </Link>
+          .
+        </output>
+      )}
+      {importError && (
+        <p role="alert" className="card px-5 py-3.5 text-sm text-accent">
+          Could not connect cloud storage: {importError}
+        </p>
+      )}
 
       <section className="space-y-4">
         <h2 className="font-display text-lg font-medium tracking-tight">
@@ -54,6 +86,18 @@ export default async function SettingsPage() {
           linkedProviders={signInMethods.providers}
           availableProviders={enabledOAuthProviders()}
         />
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="font-display text-lg font-medium tracking-tight">
+          Cloud imports
+        </h2>
+        <p className="text-sm text-ink-soft">
+          Connect Google Drive, Google Photos, or OneDrive to import photos
+          into the vault. Disconnecting only removes Memoria&rsquo;s access
+          &mdash; photos already imported stay in the vault.
+        </p>
+        <CloudConnections connections={importStatus.providers} />
       </section>
 
       {isAdmin && (
