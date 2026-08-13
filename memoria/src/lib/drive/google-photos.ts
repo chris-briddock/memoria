@@ -49,6 +49,35 @@ export async function createPickerSession(
   return { sessionId: json.id, pickerUri: json.pickerUri };
 }
 
+type MediaItemsPage = {
+  mediaItems?: Array<{
+    id: string;
+    mimeType?: string;
+    mediaFile?: { baseUrl?: string; filename?: string; mimeType?: string };
+  }>;
+  nextPageToken?: string;
+};
+
+function toPickedItems(page: MediaItemsPage): PickedItem[] {
+  const items: PickedItem[] = [];
+  for (const item of page.mediaItems ?? []) {
+    const baseUrl = item.mediaFile?.baseUrl;
+    if (!baseUrl) continue;
+    items.push({
+      id: item.id,
+      name: item.mediaFile?.filename ?? item.id,
+      mimeType: item.mimeType ?? item.mediaFile?.mimeType ?? "image/jpeg",
+      baseUrl,
+    });
+  }
+  return items;
+}
+
+function shouldStopPaging(token: string | undefined, seen: Set<string>): boolean {
+  if (!token) return false; // no next page -> do/while terminates naturally
+  return seen.has(token) || seen.size >= MAX_PAGES;
+}
+
 /**
  * Returns null while the user is still picking; the item list once
  * `mediaItemsSet` is true. Caller should poll this a few times before giving up.
@@ -76,29 +105,12 @@ export async function pollPickerSession(
     if (pageToken) url.searchParams.set("pageToken", pageToken);
     const listRes = await fetchFn(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!listRes.ok) throw new Error(`Could not list picked media items (${listRes.status})`);
-    const data = (await listRes.json()) as {
-      mediaItems?: Array<{
-        id: string;
-        mimeType?: string;
-        mediaFile?: { baseUrl?: string; filename?: string; mimeType?: string };
-      }>;
-      nextPageToken?: string;
-    };
-    for (const item of data.mediaItems ?? []) {
-      const baseUrl = item.mediaFile?.baseUrl;
-      if (!baseUrl) continue;
-      items.push({
-        id: item.id,
-        name: item.mediaFile?.filename ?? item.id,
-        mimeType: item.mimeType ?? item.mediaFile?.mimeType ?? "image/jpeg",
-        baseUrl,
-      });
-    }
-    pageToken = data.nextPageToken;
+    const page = (await listRes.json()) as MediaItemsPage;
+    items.push(...toPickedItems(page));
+
+    pageToken = page.nextPageToken;
     // Guard against a loop caused by a server echoing the same token.
-    if (pageToken && (seenTokens.has(pageToken) || seenTokens.size >= MAX_PAGES)) {
-      break;
-    }
+    if (shouldStopPaging(pageToken, seenTokens)) break;
     if (pageToken) seenTokens.add(pageToken);
   } while (pageToken);
 

@@ -21,9 +21,9 @@ type ImportStatus = {
 
 export default async function SettingsPage({
   searchParams,
-}: {
+}: Readonly<{
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+}>) {
   const [user, signInMethods, importStatus, params] = await Promise.all([
     apiGetRequired<SessionUser>("/api/me"),
     apiGetRequired<SignInMethodsData>("/api/me/sign-in-methods"),
@@ -46,7 +46,7 @@ export default async function SettingsPage({
       </header>
 
       {importConnected && (
-        <p role="status" className="card px-5 py-3.5 text-sm text-ink">
+        <output className="card block px-5 py-3.5 text-sm text-ink">
           Cloud storage connected ({
             importStatus.providers.find((p) => p.id === importConnected)?.label ??
             importConnected
@@ -55,7 +55,7 @@ export default async function SettingsPage({
             import photos
           </Link>
           .
-        </p>
+        </output>
       )}
       {importError && (
         <p role="alert" className="card px-5 py-3.5 text-sm text-accent">

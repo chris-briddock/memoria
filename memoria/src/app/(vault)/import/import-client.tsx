@@ -300,11 +300,9 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
             onClick={startPicker}
             disabled={pickerWaiting || busy}
           >
-            {pickerWaiting
-              ? "Waiting for your selection…"
-              : busy
-                ? "Importing…"
-                : "Pick photos from Google Photos"}
+            {pickerWaiting && "Waiting for your selection…"}
+            {!pickerWaiting && busy && "Importing…"}
+            {!pickerWaiting && !busy && "Pick photos from Google Photos"}
           </button>
           {pickerWaiting && (
             <p className="text-xs text-ink-faint">
@@ -379,9 +377,7 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
                   onClick={importSelected}
                   disabled={selected.size === 0 || busy}
                 >
-                  {busy
-                    ? "Importing…"
-                    : `Import ${selected.size === 0 ? "" : `${selected.size} `}selected`}
+                  {busy ? "Importing…" : `Import ${selected.size > 0 ? selected.size + " " : ""}selected`}
                 </button>
                 {selected.size > 0 && (
                   <button type="button" className="btn-ghost text-sm" onClick={() => setSelected(new Set())} disabled={busy}>
@@ -395,11 +391,11 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
       )}
 
       {summary && (
-        <p className="text-sm text-ink-soft" role="status">
+        <output className="block text-sm text-ink-soft">
           <span className="font-medium text-ink">Added {summary.created}</span>
           {summary.duplicates > 0 && ` · skipped ${summary.duplicates} already in the vault`}
           {summary.failed > 0 && <span className="text-accent"> · {summary.failed} failed</span>}
-        </p>
+        </output>
       )}
 
       {failures.length > 0 && (
