@@ -34,6 +34,15 @@ export type DrivePage = {
  */
 export const DRIVE_PAGE_SIZE = 10;
 
+/**
+ * Cap on the opaque `nextPageToken` we emit, matching the inbound cap the
+ * /api/import/[provider]/files route enforces (tokens longer than this are
+ * rejected as invalid). Deep OneDrive trees grow the resume token roughly one
+ * folder id per subfolder; once it crosses this limit it could never be
+ * handed back, so we stop paging instead of emitting an unusable token.
+ */
+export const MAX_PAGE_TOKEN_LEN = 4096;
+
 type FetchFn = typeof fetch;
 
 async function googleList(
@@ -99,12 +108,12 @@ type GraphChild = {
 /**
  * Best-looking thumbnail the grid can use without pixelation: Graph serves
  * `small` at ~96px, `medium` at ~176px and `large` at several hundred px.
- * Import tiles render well above 100px, so prefer medium and only fall back
- * to small if the drive never generated a bigger one.
+ * Import tiles render well above 100px, so take the medium rendition first,
+ * then large, and only fall back to the blurry small as a last resort.
  */
 function bestThumbnailUrl(child: GraphChild): string | null {
   const set = child.thumbnails?.[0];
-  return set?.medium?.url ?? set?.small?.url ?? set?.large?.url ?? null;
+  return set?.medium?.url ?? set?.large?.url ?? set?.small?.url ?? null;
 }
 
 type GraphChildrenPage = {
@@ -113,6 +122,8 @@ type GraphChildrenPage = {
 };
 
 const ONEDRIVE_GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+// URL.origin drops the /v1.0 path, so compare against the bare origin.
+const ONEDRIVE_GRAPH_ORIGIN = new URL(ONEDRIVE_GRAPH_BASE).origin;
 /** /import requests shouldn't stall on very deep/wide trees. */
 const ONEDRIVE_MAX_REQUESTS_PER_PAGE = 8;
 
@@ -181,12 +192,26 @@ function decodeOneDriveToken(token: string): OneDriveResume | null {
     };
     if (!Array.isArray(parsed?.stack)) return null;
     const resume = parsed.resume as { url?: unknown; offset?: unknown } | null | undefined;
+    if (
+      !(
+        resume === null ||
+        (resume &&
+          typeof resume.url === "string" &&
+          typeof resume.offset === "number" &&
+          new URL(resume.url).origin === ONEDRIVE_GRAPH_ORIGIN)
+      )
+    ) {
+      // Anything we can't prove is a Graph URL would end up fetched with the
+      // user's access token attached, so reject the whole token rather than
+      // fall back to a partial state the client could mistake for valid.
+      return null;
+    }
     return {
       stack: (parsed.stack as unknown[]).filter((s): s is string => typeof s === "string"),
       resume:
-        resume && typeof resume.url === "string" && typeof resume.offset === "number"
-          ? { url: resume.url, offset: Math.max(0, Math.floor(resume.offset)) }
-          : null,
+        resume === null
+          ? null
+          : { url: (resume as { url: string }).url, offset: Math.max(0, Math.floor((resume as { offset: number }).offset)) },
     };
   } catch {
     return null;
@@ -270,9 +295,13 @@ async function onedriveList(
     }
   }
 
+  const token = encodeOneDriveToken({ stack, resume });
+  // If the token blew past the route's length cap the client could never page
+  // further anyway — end the walk here rather than hand back a 400 trap. The
+  // files gathered for this page are still returned unchanged.
   return {
     files: buffer,
-    nextPageToken: encodeOneDriveToken({ stack, resume }),
+    nextPageToken: token !== null && token.length > MAX_PAGE_TOKEN_LEN ? null : token,
   };
 }
 

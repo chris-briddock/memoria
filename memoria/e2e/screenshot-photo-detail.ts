@@ -7,7 +7,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, type Browser, type BrowserContext } from "@playwright/test";
 
 const ROOT = path.join(__dirname, "..");
 const PORT = "3200";
@@ -64,11 +64,15 @@ async function main() {
   process.on("SIGINT", shutdown);
   process.on("exit", shutdown);
 
+  let browser: Browser | null = null;
+  let context: BrowserContext | null = null;
+  let desktopContext: BrowserContext | null = null;
+
   try {
     await waitForServer(180_000);
 
-    const browser = await chromium.launch();
-    const context = await browser.newContext({
+    browser = await chromium.launch();
+    context = await browser.newContext({
       baseURL: BASE,
       viewport: { width: 412, height: 915 },
       deviceScaleFactor: 2.625,
@@ -115,24 +119,54 @@ async function main() {
       fullPage: true,
     });
 
-    // Also grab a desktop comparison shot.
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await page.screenshot({
-      path: path.join(dir, "photo-detail-desktop.png"),
-      fullPage: true,
-    });
-
-    // Console-check horizontal overflow on mobile.
-    await page.setViewportSize({ width: 412, height: 915 });
+    // Console-check horizontal overflow on mobile while the mobile context is
+    // still pristine.
     const overflow = await page.evaluate(
       () =>
         document.documentElement.scrollWidth -
         document.documentElement.clientWidth,
     );
     console.log(`[screenshot] horizontal overflow on mobile: ${overflow}px`);
+    if (overflow > 0) {
+      throw new Error(
+        `Mobile photo detail page has ${overflow}px of horizontal overflow.`,
+      );
+    }
 
-    await browser.close();
+    // Desktop comparison shot needs a real desktop context — reusing the
+    // mobile page's viewport alone would keep isMobile/hasTouch, the Pixel UA
+    // and the 2.625 device scale, none of which setViewportSize() undoes.
+    // Carry the session over via storageState instead of signing in again.
+    desktopContext = await browser.newContext({
+      baseURL: BASE,
+      viewport: { width: 1280, height: 900 },
+      storageState: await context.storageState(),
+    });
+    const desktopPage = await desktopContext.newPage();
+    await desktopPage.goto(page.url());
+    await desktopPage.waitForSelector("img[src$='/orig']");
+    await desktopPage.screenshot({
+      path: path.join(dir, "photo-detail-desktop.png"),
+      fullPage: true,
+    });
   } finally {
+    // Close Playwright resources on every path, but never let a close failure
+    // stop shutdown() from killing the dev server.
+    try {
+      await desktopContext?.close();
+    } catch {
+      // best-effort cleanup
+    }
+    try {
+      await context?.close();
+    } catch {
+      // best-effort cleanup
+    }
+    try {
+      await browser?.close();
+    } catch {
+      // best-effort cleanup
+    }
     shutdown();
   }
 }

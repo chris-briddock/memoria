@@ -77,7 +77,7 @@ export default async function PhotoPage({
         {/* Dark gallery stage in both schemes — photographs read best against
             near-black, like a museum print room. Tight padding on phones so
             the image uses the full width; roomier matting on larger screens. */}
-        <div className="overflow-hidden rounded-lg bg-[#0b0b0c] p-2 sm:p-8">
+        <div className="overflow-hidden rounded-lg bg-stage p-2 sm:p-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`/api/photos/${photo.id}/orig`}

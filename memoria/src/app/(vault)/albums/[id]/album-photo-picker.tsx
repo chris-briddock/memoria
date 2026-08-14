@@ -101,7 +101,7 @@ export function AlbumPhotoPicker({
                     checked={checked}
                     disabled={isPending}
                     className="sr-only"
-                    aria-label={photo.caption ?? photo.originalFilename}
+                    aria-label={photo.caption || photo.originalFilename}
                     onChange={() =>
                       startTransition(async () => {
                         toggleOptimistic(photo.id);
@@ -120,8 +120,8 @@ export function AlbumPhotoPicker({
                     aria-hidden
                     className={`absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full transition ${
                       checked
-                        ? "bg-accent text-white"
-                        : "bg-black/55 text-transparent ring-1 ring-white/80"
+                        ? "bg-accent text-paper"
+                        : "bg-scrim/55 text-transparent ring-1 ring-paper/80"
                     }`}
                   >
                     <svg

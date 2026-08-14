@@ -247,6 +247,52 @@ describe("listDriveFiles", () => {
     expect(String(vi.mocked(fetch).mock.calls[1][0])).toBe(rootChildrenUrl);
   });
 
+  it("ignores a forged page token whose resume URL points off Graph", async () => {
+    const { listDriveFiles: list } = await withToken();
+    const evil = Buffer.from(
+      JSON.stringify({
+        stack: [],
+        resume: { url: "https://attacker.example.com/steal?x=", offset: 0 },
+      }),
+      "utf8",
+    ).toString("base64url");
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          value: [{ id: "safe", name: "safe.jpg", size: 10, file: { mimeType: "image/jpeg" } }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const page = await list(cloudProvider("onedrive")!, "u", evil);
+    expect(page.files[0].id).toBe("safe");
+    // Fallback restarted at the drive root, never at the attacker URL.
+    const requestUrl = String(vi.mocked(fetch).mock.calls[0][0]);
+    expect(requestUrl).toContain("/me/drive/items/root/children");
+    expect(requestUrl).not.toContain("attacker.example.com");
+  });
+
+  it("ignores a forged page token whose resume URL is not a URL at all", async () => {
+    const { listDriveFiles: list } = await withToken();
+    const garbage = Buffer.from(
+      JSON.stringify({ stack: [], resume: { url: "::not-a-url", offset: 0 } }),
+      "utf8",
+    ).toString("base64url");
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          value: [{ id: "safe", name: "safe.jpg", size: 10, file: { mimeType: "image/jpeg" } }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await list(cloudProvider("onedrive")!, "u", garbage);
+    const requestUrl = String(vi.mocked(fetch).mock.calls[0][0]);
+    expect(requestUrl).toContain("/me/drive/items/root/children");
+  });
+
   it("descends into subfolders so nested files are listed too", async () => {
     const { listDriveFiles: list } = await withToken();
     vi.mocked(fetch)

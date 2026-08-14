@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/dal";
 import { cloudProvider, isCloudProviderEnabled } from "@/lib/import-providers";
-import { listDriveFiles } from "@/lib/drive/providers";
+import { listDriveFiles, MAX_PAGE_TOKEN_LEN } from "@/lib/drive/providers";
 import { logger } from "@/lib/logger";
 
 const log = logger("api.import.files");
@@ -10,8 +10,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/** Opaque page-token cap — keeps the query string sane and stops abuse. */
-const MAX_PAGE_TOKEN_LEN = 4096;
+// Opaque page-token cap lives in providers.ts so emission and validation
+// share one limit: keeps the query string sane and stops abuse.
 
 export async function GET(
   request: Request,

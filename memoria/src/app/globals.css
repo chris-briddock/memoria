@@ -18,6 +18,10 @@
   --accent: #d92323;
   --accent-hover: #b91c1c;
   --accent-soft: #fbecec;
+  /* Fixed darks for surfaces that stay dark in both schemes: the photo
+     detail stage (a museum mat for prints) and overlay scrims on imagery. */
+  --stage: #0b0b0c;
+  --scrim: #000000;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -44,6 +48,8 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
+  --color-stage: var(--stage);
+  --color-scrim: var(--scrim);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif,

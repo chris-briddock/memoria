@@ -5,7 +5,7 @@ import { PhotoGrid } from "@/components/photo-grid";
 export const metadata: Metadata = { title: "Favourites" };
 
 export default async function FavouritesPage() {
-  const photos = await listFavoritePhotos();
+  const { rows: photos, total } = await listFavoritePhotos();
 
   return (
     <div className="space-y-10">
@@ -14,13 +14,13 @@ export default async function FavouritesPage() {
           Favourites
         </h1>
         <p className="mt-1 text-sm text-ink-soft">
-          {photos.length === 0
+          {total === 0
             ? "Star photos to gather them here."
-            : `${photos.length} ${photos.length === 1 ? "photo" : "photos"}`}
+            : `${total} ${total === 1 ? "photo" : "photos"}`}
         </p>
       </header>
 
-      {photos.length === 0 ? (
+      {total === 0 ? (
         <div className="card px-6 py-16 text-center">
           <svg
             viewBox="0 0 24 24"
