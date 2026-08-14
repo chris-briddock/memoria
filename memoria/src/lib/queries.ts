@@ -26,6 +26,28 @@ export async function listPhotos(limit = 200) {
     .limit(limit);
 }
 
+export async function listFavoritePhotos(limit = 500) {
+  await verifySession();
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select({
+        id: photos.id,
+        caption: photos.caption,
+        originalFilename: photos.originalFilename,
+        width: photos.width,
+        height: photos.height,
+        takenAt: photos.takenAt,
+        favorite: photos.favorite,
+      })
+      .from(photos)
+      .where(eq(photos.favorite, true))
+      .orderBy(desc(photos.takenAt), desc(photos.createdAt))
+      .limit(limit),
+    db.select({ total: count() }).from(photos).where(eq(photos.favorite, true)),
+  ]);
+  return { rows, total };
+}
+
 export async function getPhoto(id: string) {
   await verifySession();
   const [row] = await db

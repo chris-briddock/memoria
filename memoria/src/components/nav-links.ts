@@ -8,6 +8,7 @@ export type NavLink = {
 const baseLinks: NavLink[] = [
   { href: "/", label: "Photos" },
   { href: "/albums", label: "Albums" },
+  { href: "/favourites", label: "Favourites" },
   { href: "/import", label: "Import" },
   { href: "/settings", label: "Settings" },
 ];

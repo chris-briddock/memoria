@@ -75,14 +75,49 @@ function getBaseAdapter(): BaseAdapter {
   return baseAdapter;
 }
 
-const adapter: BaseAdapter = new Proxy({} as BaseAdapter, {
-  get(_target, prop) {
-    if (prop === "createUser") return createUserWithInviteGate;
-    const base = getBaseAdapter() as Record<PropertyKey, unknown>;
-    const value = Reflect.get(base, prop);
-    return typeof value === "function" ? value.bind(base) : value;
-  },
-});
+// Auth.js's init() enumerates the adapter with Object.keys() and rebuilds it
+// as `Object.keys(adapter).reduce(...)`, wrapping each method with
+// error-handling + debug logging. A Proxy over `{}` has no ownKeys trap and
+// enumerates to an empty object, so every method except the one Auth.js reads
+// directly would go missing — the proxy previously here lost getUserByAccount
+// this way, blowing up the OAuth callback with "getUserByAccount is not a
+// function". The adapter must therefore be a plain object with own,
+// enumerable keys for every method the base adapter exposes. We still
+// delegate at call time so the real DrizzleAdapter (and its pool) is only
+// built once Auth.js actually invokes a method — importing this module must
+// not require DATABASE_URL during `next build` page-data collection.
+const ADAPTER_METHODS = [
+  "createUser",
+  "getUser",
+  "getUserByEmail",
+  "getUserByAccount",
+  "updateUser",
+  "deleteUser",
+  "linkAccount",
+  "unlinkAccount",
+  "getSessionAndUser",
+  "createSession",
+  "updateSession",
+  "deleteSession",
+  "createVerificationToken",
+  "useVerificationToken",
+  "getAccount",
+] as const satisfies readonly (keyof BaseAdapter)[];
+
+const adapter: BaseAdapter = Object.fromEntries(
+  ADAPTER_METHODS.map((name) => [
+    name,
+    name === "createUser"
+      ? createUserWithInviteGate
+      : (...args: unknown[]) => {
+          const base = getBaseAdapter() as Record<
+            string,
+            (...a: unknown[]) => unknown
+          >;
+          return base[name](...args);
+        },
+  ]),
+) as unknown as BaseAdapter;
 
 // createUser is overridden to gate OAuth account creation on an invite; the
 // rest of the adapter delegates to the lazily-built base.

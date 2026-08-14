@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { apiGet, apiGetRequired } from "@/lib/api-client";
 import type { SessionUser } from "@/lib/types";
+import type { GridPhoto } from "@/components/photo-grid";
 import { PhotoGrid } from "@/components/photo-grid";
 import { DeleteAlbumButton } from "./delete-album-button";
+import { AlbumPhotoPicker } from "./album-photo-picker";
 
 type AlbumDetail = {
   album: {
@@ -50,6 +52,7 @@ export default async function AlbumPage({
   if (!result) notFound();
 
   const { album, photos } = result;
+  const allPhotos = await apiGetRequired<GridPhoto[]>("/api/photos");
   const canDelete = album.createdBy === user.id || user.role === "admin";
 
   return (
@@ -74,14 +77,28 @@ export default async function AlbumPage({
         {canDelete && <DeleteAlbumButton albumId={album.id} />}
       </header>
 
+      <AlbumPhotoPicker
+        albumId={album.id}
+        photos={allPhotos.map((p) => ({
+          id: p.id,
+          caption: p.caption,
+          originalFilename: p.originalFilename,
+          width: p.width,
+          height: p.height,
+        }))}
+        memberOf={photos.map((p) => p.id)}
+      />
+
       {photos.length === 0 ? (
         <div className="card px-6 py-16 text-center">
           <h2 className="font-display text-2xl font-semibold tracking-tight">
             Nothing here yet
           </h2>
           <p className="mt-2 text-sm text-ink-soft">
-            Open any photo and tick <span className="italic">{album.name}</span>{" "}
-            under Albums to add it.
+            Use the <span className="italic">Add photos</span> button above to
+            file existing photos here, or tick{" "}
+            <span className="italic">{album.name}</span> under Albums on any
+            photo&rsquo;s page.
           </p>
         </div>
       ) : (

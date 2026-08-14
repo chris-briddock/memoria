@@ -9,7 +9,13 @@ function user(role: SessionUser["role"]): SessionUser {
 describe("getNavLinks", () => {
   it("gives members the core destinations without the Family link", () => {
     const links = getNavLinks(user("member"));
-    expect(links.map((l) => l.href)).toEqual(["/", "/albums", "/import", "/settings"]);
+    expect(links.map((l) => l.href)).toEqual([
+      "/",
+      "/albums",
+      "/favourites",
+      "/import",
+      "/settings",
+    ]);
   });
 
   it("gives admins the member links plus the Family settings", () => {
@@ -17,6 +23,7 @@ describe("getNavLinks", () => {
     expect(links.map((l) => l.href)).toEqual([
       "/",
       "/albums",
+      "/favourites",
       "/import",
       "/settings",
       "/settings/family",
@@ -26,6 +33,6 @@ describe("getNavLinks", () => {
 
   it("does not mutate the shared link list between calls", () => {
     getNavLinks(user("admin"));
-    expect(getNavLinks(user("member")).map((l) => l.href)).toHaveLength(4);
+    expect(getNavLinks(user("member")).map((l) => l.href)).toHaveLength(5);
   });
 });

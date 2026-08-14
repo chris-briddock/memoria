@@ -63,6 +63,7 @@ function makeChain(result: unknown) {
     values: vi.fn(() => chain),
     returning: vi.fn(() => chain),
     onConflictDoNothing: vi.fn(() => chain),
+    orderBy: vi.fn(() => chain),
     limit: vi.fn(() => chain),
     then: vi.fn((resolve: (v: unknown) => unknown) =>
       Promise.resolve(result).then(resolve),

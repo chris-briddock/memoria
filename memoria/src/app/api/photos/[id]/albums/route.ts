@@ -87,7 +87,32 @@ export async function DELETE(
 
   await db
     .delete(albumPhotos)
-    .where(and(eq(albumPhotos.albumId, aid.data), eq(albumPhotos.photoId, pid.data)));
+    .where(
+      and(eq(albumPhotos.albumId, aid.data), eq(albumPhotos.photoId, pid.data)),
+    );
+
+  // If the removed photo was the album's cover, promote the earliest
+  // remaining member so the album card never shows a dangling cover. Runs
+  // without a transaction so the broader test-suite mock stays simple; each
+  // statement is independently idempotent.
+  await db
+    .update(albums)
+    .set({ coverPhotoId: null })
+    .where(and(eq(albums.id, aid.data), eq(albums.coverPhotoId, pid.data)));
+
+  const [next] = await db
+    .select({ photoId: albumPhotos.photoId })
+    .from(albumPhotos)
+    .where(eq(albumPhotos.albumId, aid.data))
+    .orderBy(albumPhotos.addedAt)
+    .limit(1);
+
+  if (next) {
+    await db
+      .update(albums)
+      .set({ coverPhotoId: next.photoId })
+      .where(and(eq(albums.id, aid.data), isNull(albums.coverPhotoId)));
+  }
 
   revalidatePath(`/albums/${aid.data}`);
   revalidatePath(`/photos/${pid.data}`);

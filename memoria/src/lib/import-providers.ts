@@ -50,8 +50,10 @@ export const CLOUD_PROVIDERS: CloudProviderDef[] = [
     label: "Microsoft OneDrive",
     shortLabel: "Microsoft",
     // `offline_access` requests the refresh token; `Files.Read` is the least
-    // privileged scope covering both listing and downloading.
-    scope: "Files.Read offline_access",
+    // privileged scope covering listing and downloading. `User.Read` is
+    // additionally required: after the code exchange we call Graph `/me` to
+    // resolve the remote account id, and Graph 401s that call without it.
+    scope: "Files.Read offline_access User.Read",
     env: { id: "IMPORT_MICROSOFT_CLIENT_ID", secret: "IMPORT_MICROSOFT_CLIENT_SECRET" },
     authorizeUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",

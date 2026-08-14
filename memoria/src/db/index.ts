@@ -64,8 +64,15 @@ export const db: Db = new Proxy({} as Db, {
     return Reflect.ownKeys(globalForDb.db);
   },
   getOwnPropertyDescriptor(_target, prop) {
-    globalForDb.db ??= drizzle(getPool(), { schema });
-    return Object.getOwnPropertyDescriptor(globalForDb.db, prop);
+    const instance = globalForDb.db;
+    if (!instance) {
+      // Re-entrant access while getDb() is still initializing (e.g. Auth.js's
+      // createUser gate). Returning a non-enumerable placeholder keeps the
+      // proxy invariants satisfied without crashing the object descriptors
+      // of whatever triggered us.
+      return { value: undefined, writable: true, enumerable: false, configurable: true };
+    }
+    return Object.getOwnPropertyDescriptor(instance, prop);
   },
 });
 
