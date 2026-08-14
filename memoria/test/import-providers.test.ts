@@ -38,6 +38,15 @@ describe("import provider registry", () => {
     // Google ("gdrive"); the two must never collide.
     expect(cloudProvider("google")).toBeUndefined();
   });
+
+  it("requests User.Read for OneDrive so Graph /me resolves the account id", () => {
+    // Regression: without User.Read the connect flow 401s after the token
+    // exchange, when fetchExternalAccountId calls graph.microsoft.com/me.
+    const scope = cloudProvider("onedrive")?.scope ?? "";
+    for (const required of ["Files.Read", "offline_access", "User.Read"]) {
+      expect(scope.split(" ")).toContain(required);
+    }
+  });
 });
 
 describe("listDriveFiles", () => {
@@ -70,9 +79,10 @@ describe("listDriveFiles", () => {
       ),
     );
 
-    const files = await list(cloudProvider("gdrive")!, "user-1");
-    expect(files).toHaveLength(1);
-    expect(files[0]).toMatchObject({
+    const page = await list(cloudProvider("gdrive")!, "user-1");
+    expect(page.files).toHaveLength(1);
+    expect(page.nextPageToken).toBeNull();
+    expect(page.files[0]).toMatchObject({
       id: "abc",
       name: "holiday.jpg",
       mimeType: "image/jpeg",
@@ -87,7 +97,10 @@ describe("listDriveFiles", () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify({}), { status: 200 }),
     );
-    await expect(list(cloudProvider("gdrive")!, "u")).resolves.toEqual([]);
+    await expect(list(cloudProvider("gdrive")!, "u")).resolves.toEqual({
+      files: [],
+      nextPageToken: null,
+    });
   });
 
   it("keeps working when optional Drive fields are absent", async () => {
@@ -100,7 +113,7 @@ describe("listDriveFiles", () => {
         { status: 200 },
       ),
     );
-    const files = await list(cloudProvider("gdrive")!, "u");
+    const { files } = await list(cloudProvider("gdrive")!, "u");
     expect(files[0].thumbnailUrl).toBeNull();
     expect(files[0].createdTime).toBeNull();
   });
@@ -131,9 +144,9 @@ describe("listDriveFiles", () => {
       ),
     );
 
-    const files = await list(cloudProvider("onedrive")!, "user-1");
-    expect(files).toHaveLength(1);
-    expect(files[0]).toMatchObject({
+    const page = await list(cloudProvider("onedrive")!, "user-1");
+    expect(page.files).toHaveLength(1);
+    expect(page.files[0]).toMatchObject({
       id: "item1",
       name: "photo.png",
       mimeType: "image/png",
@@ -141,11 +154,247 @@ describe("listDriveFiles", () => {
     });
   });
 
+  it("passes the Google pageToken back to Drive and surfaces nextPageToken", async () => {
+    const { listDriveFiles: list } = await withToken();
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            files: [{ id: "a", name: "a.jpg", mimeType: "image/jpeg", size: "1" }],
+            nextPageToken: "tok-2",
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            files: [{ id: "b", name: "b.jpg", mimeType: "image/jpeg", size: "1" }],
+          }),
+          { status: 200 },
+        ),
+      );
+
+    const first = await list(cloudProvider("gdrive")!, "u");
+    expect(first.nextPageToken).toBe("tok-2");
+
+    const second = await list(cloudProvider("gdrive")!, "u", first.nextPageToken);
+    expect(second.files[0].id).toBe("b");
+
+    const secondCallUrl = vi.mocked(fetch).mock.calls[1][0] as URL;
+    expect(secondCallUrl.searchParams.get("pageToken")).toBe("tok-2");
+  });
+
+  it("follows a folder's @odata.nextLink verbatim while filling the page", async () => {
+    const { listDriveFiles: list } = await withToken();
+    const nextLink =
+      "https://graph.microsoft.com/v1.0/me/drive/items/root/children?$select=id&$skiptoken=abc123";
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            value: [{ id: "p1", name: "p1.jpg", size: 10, file: { mimeType: "image/jpeg" } }],
+            "@odata.nextLink": nextLink,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            value: [{ id: "p2", name: "p2.jpg", size: 10, file: { mimeType: "image/jpeg" } }],
+          }),
+          { status: 200 },
+        ),
+      );
+
+    // The page isn't full after the first children response, so the walker
+    // keeps going and fetches the nextLink in the same call.
+    const page = await list(cloudProvider("onedrive")!, "u");
+    expect(page.files.map((f) => f.id)).toEqual(["p1", "p2"]);
+    expect(page.nextPageToken).toBeNull();
+
+    // The second fetch goes to the exact URL Microsoft handed us — no params
+    // re-appended, nothing overwritten.
+    const secondCallUrl = String(vi.mocked(fetch).mock.calls[1][0]);
+    expect(secondCallUrl).toBe(nextLink);
+  });
+
+  it("resumes a partially-consumed children page via the opaque token", async () => {
+    const { listDriveFiles: list } = await withToken();
+    const fifteen = Array.from({ length: 15 }, (_, i) => ({
+      id: `f${i}`,
+      name: `f${i}.jpg`,
+      size: 10,
+      file: { mimeType: "image/jpeg" },
+    }));
+    const pageJson = () =>
+      new Response(JSON.stringify({ value: fifteen }), { status: 200 });
+    vi.mocked(fetch).mockResolvedValueOnce(pageJson());
+
+    // First call stops mid-page once the client page is full.
+    const first = await list(cloudProvider("onedrive")!, "u");
+    expect(first.files.map((f) => f.id)).toEqual(fifteen.slice(0, 10).map((f) => f.id));
+    expect(first.nextPageToken).toBeTypeOf("string");
+
+    vi.mocked(fetch).mockResolvedValueOnce(pageJson());
+    // Second call re-fetches the same children URL and skips what was offered.
+    const second = await list(cloudProvider("onedrive")!, "u", first.nextPageToken);
+    expect(second.files.map((f) => f.id)).toEqual(fifteen.slice(10).map((f) => f.id));
+    expect(second.nextPageToken).toBeNull();
+
+    const rootChildrenUrl = String(vi.mocked(fetch).mock.calls[0][0]);
+    expect(String(vi.mocked(fetch).mock.calls[1][0])).toBe(rootChildrenUrl);
+  });
+
+  it("descends into subfolders so nested files are listed too", async () => {
+    const { listDriveFiles: list } = await withToken();
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            value: [
+              { id: "root-pic", name: "root.jpg", size: 10, file: { mimeType: "image/jpeg" } },
+              { id: "fld1", name: "Holidays", folder: { childCount: 1 } },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            value: [
+              { id: "nested-pic", name: "nested.jpg", size: 20, file: { mimeType: "image/jpeg" } },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+
+    const page = await list(cloudProvider("onedrive")!, "u");
+    expect(page.files.map((f) => f.id)).toEqual(["root-pic", "nested-pic"]);
+    expect(page.nextPageToken).toBeNull();
+
+    const folderUrl = String(vi.mocked(fetch).mock.calls[1][0]);
+    expect(folderUrl).toContain("/me/drive/items/fld1/children");
+    expect(folderUrl).toContain("%24expand=thumbnails");
+  });
+
+  it("prefers the medium thumbnail size so grid tiles aren't pixelated", async () => {
+    const { listDriveFiles: list } = await withToken();
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          value: [
+            {
+              id: "t1",
+              name: "t.jpg",
+              size: 10,
+              file: { mimeType: "image/jpeg" },
+              thumbnails: [
+                {
+                  small: { url: "https://thumb/small" },
+                  medium: { url: "https://thumb/medium" },
+                  large: { url: "https://thumb/large" },
+                },
+              ],
+            },
+            {
+              id: "t2",
+              name: "u.jpg",
+              size: 10,
+              file: { mimeType: "image/jpeg" },
+              // Drive sometimes only generates the small rendition.
+              thumbnails: [{ small: { url: "https://thumb/only-small" } }],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const { files } = await list(cloudProvider("onedrive")!, "u");
+    expect(files[0].thumbnailUrl).toBe("https://thumb/medium");
+    expect(files[1].thumbnailUrl).toBe("https://thumb/only-small");
+
+    const requestUrl = String(vi.mocked(fetch).mock.calls[0][0]);
+    // Children listing, not delta: delta silently drops thumbnails on
+    // consumer OneDrive and ignores $top. Children + $expand gives us both,
+    // and the walker starts at the canonical root item id.
+    expect(requestUrl).toContain("/me/drive/items/root/children");
+    expect(requestUrl).toContain("%24expand=thumbnails");
+    expect(requestUrl).toContain("%24top=");
+  });
+
   it("throws when the listing call fails", async () => {
     const { listDriveFiles: list } = await withToken();
     vi.mocked(fetch).mockResolvedValueOnce(new Response("boom", { status: 500 }));
     await expect(list(cloudProvider("gdrive")!, "user-1")).rejects.toThrow(
       /Google Drive list failed \(500\)/,
+    );
+  });
+});
+
+describe("fetchDriveThumbnail", () => {
+  async function withToken() {
+    vi.resetModules();
+    vi.doMock("@/lib/drive/token", () => ({
+      getValidAccessToken: vi.fn().mockResolvedValue("access-token"),
+    }));
+    return import("@/lib/drive/providers");
+  }
+
+  it("resolves Google's thumbnailLink and fetches it with the OAuth token", async () => {
+    const { fetchDriveThumbnail: thumb } = await withToken();
+    const pixels = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const link = "https://drive.google.com/thumbnail?sz=w220&id=rabbit-1";
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ thumbnailLink: link }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(pixels, { status: 200, headers: { "Content-Type": "image/jpeg" } }),
+      );
+
+    const out = await thumb(cloudProvider("gdrive")!, "user-1", "rabbit-1");
+    expect(out.contentType).toBe("image/jpeg");
+    expect(Buffer.from(out.body).equals(Buffer.from(pixels))).toBe(true);
+
+    // Meta call targets the file's fields.
+    expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain(
+      "drive/v3/files/rabbit-1?fields=thumbnailLink",
+    );
+    // Bytes call is the exact thumbnailLink, with the bearer token attached —
+    // which is precisely what a hot-linked <img> cannot do.
+    expect(String(vi.mocked(fetch).mock.calls[1][0])).toBe(link);
+    const authHeader = (vi.mocked(fetch).mock.calls[1][1] as RequestInit).headers as Record<
+      string,
+      string
+    >;
+    expect(authHeader.Authorization).toBe("Bearer access-token");
+  });
+
+  it("requests the medium rendition content for OneDrive", async () => {
+    const { fetchDriveThumbnail: thumb } = await withToken();
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "Content-Type": "image/jpeg" } }),
+    );
+
+    const out = await thumb(cloudProvider("onedrive")!, "user-1", "item-7");
+    expect(out.contentType).toBe("image/jpeg");
+    expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain(
+      "/me/drive/items/item-7/thumbnails/0/medium/content",
+    );
+  });
+
+  it("reports Google files that have no generated thumbnail", async () => {
+    const { fetchDriveThumbnail: thumb } = await withToken();
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({}), { status: 200 }),
+    );
+    await expect(thumb(cloudProvider("gdrive")!, "user-1", "no-thumb")).rejects.toThrow(
+      /No thumbnail available/,
     );
   });
 });

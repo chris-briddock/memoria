@@ -45,6 +45,9 @@ function formatBytes(bytes: number): string {
 const POLL_INTERVAL_MS = 3000;
 const POLL_LIMIT = 100; // ~5 minutes of polling
 
+/** Back-to-top appears once the user is well past a pageful of the grid. */
+const BACK_TO_TOP_SCROLL_PX = 600;
+
 export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
   const router = useRouter();
   const connected = surfaces.filter((s) => s.configured && s.connected);
@@ -52,11 +55,14 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
   const active = connected.find((s) => s.id === activeId) ?? null;
 
   const [files, setFiles] = useState<DriveFile[] | null>(null);
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [failures, setFailures] = useState<Failure[]>([]);
+  const [showBackToTop, setShowBackToTop] = useState(false);
 
   // Picker state
   const [pickerWaiting, setPickerWaiting] = useState(false);
@@ -78,23 +84,62 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
     [],
   );
 
-  async function loadFiles(surfaceId: string) {
-    setFiles(null);
-    setFilesError(null);
-    setSelected(new Set());
-    setSummary(null);
-    setFailures([]);
+  // Back-to-top: recompute on scroll (passive so we never block the thread).
+  useEffect(() => {
+    const onScroll = () => setShowBackToTop(window.scrollY > BACK_TO_TOP_SCROLL_PX);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  /**
+   * Fetch one page of files. `append=false` starts a fresh listing for the
+   * surface (also clears selection/summary); `append=true` keeps already
+   * loaded files and adds the next page on the end.
+   */
+  async function loadPage(surfaceId: string, append: boolean) {
+    if (!append) {
+      setFiles(null);
+      setFilesError(null);
+      setSelected(new Set());
+      setSummary(null);
+      setFailures([]);
+      setNextPageToken(null);
+    } else {
+      setLoadingMore(true);
+    }
+
     try {
-      const res = await fetch(`/api/import/${surfaceId}/files`);
+      // The token travels statefully via the previous response's
+      // nextPageToken, but for append we read whatever's currently stored so
+      // the button handler doesn't need to thread it.
+      const token = append ? nextPageToken : null;
+      const url = token
+        ? `/api/import/${surfaceId}/files?pageToken=${encodeURIComponent(token)}`
+        : `/api/import/${surfaceId}/files`;
+      const res = await fetch(url);
       const body = await res.json().catch(() => null);
       if (!res.ok) {
-        setFilesError((body?.error as string) ?? "Could not list files.");
+        const message = (body?.error as string) ?? "Could not list files.";
+        if (append) setFailures((prev) => [...prev, { filename: "Load more", reason: message }]);
+        else setFilesError(message);
         return;
       }
-      setFiles((body?.files as DriveFile[]) ?? []);
+      const page = (body?.files as DriveFile[]) ?? [];
+      setFiles((prev) => (append && prev ? [...prev, ...page] : page));
+      setNextPageToken((body?.nextPageToken as string | null) ?? null);
     } catch {
       // Network-level failure — the promise must never reject unhandled here.
-      setFilesError("Could not list files.");
+      if (append) {
+        setFailures((prev) => [
+          ...prev,
+          { filename: "Load more", reason: "Could not list files." },
+        ]);
+      } else {
+        setFilesError("Could not list files.");
+      }
+    } finally {
+      if (append) setLoadingMore(false);
     }
   }
 
@@ -105,7 +150,7 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
     if (initialLoad.current) return;
     initialLoad.current = true;
     if (active?.kind === "drive") {
-      const t = setTimeout(() => void loadFiles(active.id), 0);
+      const t = setTimeout(() => void loadPage(active.id, false), 0);
       return () => clearTimeout(t);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only bootstrap
@@ -114,7 +159,7 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
   function selectTab(id: string) {
     setActiveId(id);
     const surface = connected.find((s) => s.id === id);
-    if (surface?.kind === "drive") void loadFiles(id);
+    if (surface?.kind === "drive") void loadPage(id, false);
   }
 
   function toggle(id: string) {
@@ -378,7 +423,7 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
                   );
                 })}
               </ul>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   className="btn-primary"
@@ -390,6 +435,16 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
                 {selected.size > 0 && (
                   <button type="button" className="btn-ghost text-sm" onClick={() => setSelected(new Set())} disabled={busy}>
                     Clear selection
+                  </button>
+                )}
+                {nextPageToken && (
+                  <button
+                    type="button"
+                    className="btn-ghost text-sm"
+                    onClick={() => active && void loadPage(active.id, true)}
+                    disabled={loadingMore}
+                  >
+                    {loadingMore ? "Loading…" : `Load more (${files.length} shown)`}
                   </button>
                 )}
               </div>
@@ -414,6 +469,20 @@ export function ImportClient({ surfaces }: Readonly<{ surfaces: Surface[] }>) {
             </li>
           ))}
         </ul>
+      )}
+
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          aria-label="Back to top"
+          className="fixed bottom-6 right-6 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-paper shadow-md transition hover:bg-paper-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5" aria-hidden>
+            <path d="M12 19V5" />
+            <path d="m5 12 7-7 7 7" />
+          </svg>
+        </button>
       )}
     </div>
   );

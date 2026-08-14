@@ -53,35 +53,40 @@ export default async function PhotoPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/"
-        className="text-sm text-ink-soft transition hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
-        ← Back to photos
-      </Link>
+      <div className="space-y-2">
+        <Link
+          href="/"
+          className="text-sm text-ink-soft transition hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          ← Back to photos
+        </Link>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        {/* Title and uploader sit above the image on every breakpoint so the
+            page reads top-down. On large screens they also anchor the aside. */}
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight break-words">
+            {photo.caption || photo.originalFilename}
+          </h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            Uploaded by {uploaderName ?? uploaderEmail}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-6 sm:gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         {/* Dark gallery stage in both schemes — photographs read best against
-            near-black, like a museum print room. */}
-        <div className="overflow-hidden rounded-lg bg-[#0b0b0c] p-4 sm:p-8">
+            near-black, like a museum print room. Tight padding on phones so
+            the image uses the full width; roomier matting on larger screens. */}
+        <div className="overflow-hidden rounded-lg bg-[#0b0b0c] p-2 sm:p-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`/api/photos/${photo.id}/orig`}
             alt={photo.caption ?? photo.originalFilename}
-            className="mx-auto max-h-[80vh] w-auto object-contain"
+            className="mx-auto max-h-[60vh] w-auto object-contain sm:max-h-[80vh]"
           />
         </div>
 
         <aside className="space-y-6">
-          <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight break-words">
-              {photo.caption || photo.originalFilename}
-            </h1>
-            <p className="mt-1 text-sm text-ink-soft">
-              Uploaded by {uploaderName ?? uploaderEmail}
-            </p>
-          </div>
-
           <PhotoActions
             photoId={photo.id}
             favorite={photo.favorite}
